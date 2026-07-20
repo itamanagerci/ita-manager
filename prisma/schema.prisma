@@ -1,0 +1,156 @@
+// Lot 0 — Socle technique : authentification, rôles, accès, pattern statut/historique.
+// Aucun module métier (Achat, QHSE, etc.) n'est modélisé ici — uniquement le référentiel
+// de structure (Module/SousModule) et les tables transversales.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL") // pooled (pgbouncer) — utilisé à l'exécution
+  directUrl = env("DIRECT_URL") // connexion directe — utilisée par les migrations
+  schemas   = ["public", "auth"]
+}
+
+/// Shadow model pointant vers auth.users (géré par Supabase Auth).
+/// Permet une vraie FK Postgres depuis Utilisateur sans dupliquer la gestion du mot de passe.
+model AuthUser {
+  id          String       @id @db.Uuid
+  utilisateur Utilisateur?
+
+  @@map("users")
+  @@schema("auth")
+}
+
+enum NiveauHierarchique {
+  DIRECTEUR
+  CHEF_SERVICE
+  AGENT
+
+  @@schema("public")
+}
+
+enum StatutUtilisateur {
+  ACTIF
+  INACTIF
+
+  @@schema("public")
+}
+
+/// Référentiel des 9 modules métier + le module transversal "0. Authentification et Rôles".
+/// Contient uniquement la structure (noms/slugs) — pas les formulaires/circuits métier.
+model Module {
+  id          String       @id @default(cuid())
+  code        String       @unique
+  nom         String
+  icone       String?
+  ordre       Int          @default(0)
+  visibleMenu Boolean      @default(true)
+  sousModules SousModule[]
+
+  @@schema("public")
+}
+
+/// Chaque Module a toujours au moins un SousModule (y compris les modules "uniques"
+/// comme Service Achat, via un sous-module synthétique) — évite les pièges de contrainte
+/// d'unicité sur colonnes nullables et uniformise la logique de rendu/garde.
+model SousModule {
+  id                String                  @id @default(cuid())
+  moduleId          String
+  module            Module                  @relation(fields: [moduleId], references: [id])
+  code              String
+  nom               String
+  ordre             Int                     @default(0)
+  actif             Boolean                 @default(true)
+  fonctionDefauts   FonctionModuleDefaut[]
+  accesUtilisateurs AccesUtilisateur[]
+
+  @@unique([moduleId, code])
+  @@schema("public")
+}
+
+/// Référentiel des Fonctions (ex: Assistante de direction, Resp. Achat, Chef de chantier...).
+/// Détermine les modules/sous-modules accessibles par défaut.
+model Fonction {
+  id             String                  @id @default(cuid())
+  nom            String                  @unique
+  description    String?
+  actif          Boolean                 @default(true)
+  utilisateurs   Utilisateur[]
+  modulesDefauts FonctionModuleDefaut[]
+
+  @@schema("public")
+}
+
+model FonctionModuleDefaut {
+  id              String     @id @default(cuid())
+  fonctionId      String
+  fonction        Fonction   @relation(fields: [fonctionId], references: [id], onDelete: Cascade)
+  sousModuleId    String
+  sousModule      SousModule @relation(fields: [sousModuleId], references: [id])
+  activeParDefaut Boolean    @default(true)
+
+  @@unique([fonctionId, sousModuleId])
+  @@schema("public")
+}
+
+model Utilisateur {
+  id                 String             @id @default(cuid())
+  authUserId         String             @unique @db.Uuid
+  authUser           AuthUser           @relation(fields: [authUserId], references: [id])
+  nom                String
+  prenom             String
+  email              String             @unique
+  telephone          String?
+  niveauHierarchique NiveauHierarchique
+  fonctionId         String
+  fonction           Fonction           @relation(fields: [fonctionId], references: [id])
+  statut             StatutUtilisateur  @default(ACTIF)
+  premiereConnexion  Boolean            @default(true)
+  dateCreation       DateTime           @default(now())
+  dateModification   DateTime           @updatedAt
+
+  acces             AccesUtilisateur[] @relation("AccesDuUtilisateur")
+  accesModifies     AccesUtilisateur[] @relation("AccesModifiePar")
+  actionsHistorique HistoriqueStatut[]
+
+  @@schema("public")
+}
+
+/// Droits d'accès individuels. Initialisés depuis FonctionModuleDefaut à la création
+/// de l'utilisateur ; estException=true marque une exception manuelle RH, exclue de la
+/// propagation automatique lors d'une évolution des defaults de la Fonction.
+model AccesUtilisateur {
+  id               String       @id @default(cuid())
+  utilisateurId    String
+  utilisateur      Utilisateur  @relation("AccesDuUtilisateur", fields: [utilisateurId], references: [id], onDelete: Cascade)
+  sousModuleId     String
+  sousModule       SousModule   @relation(fields: [sousModuleId], references: [id])
+  actif            Boolean
+  estException     Boolean      @default(false)
+  modifieParId     String?
+  modifiePar       Utilisateur? @relation("AccesModifiePar", fields: [modifieParId], references: [id])
+  dateModification DateTime     @updatedAt
+
+  @@unique([utilisateurId, sousModuleId])
+  @@schema("public")
+}
+
+/// Pattern générique réutilisé par tous les futurs circuits de validation (Achat, Congés,
+/// AST...). Discriminant applicatif (entiteType, entiteId) plutôt qu'une relation
+/// polymorphe (non supportée par Prisma) — aucune FK vers les tables métier futures.
+model HistoriqueStatut {
+  id              String      @id @default(cuid())
+  entiteType      String
+  entiteId        String
+  statutPrecedent String?
+  statutNouveau   String
+  commentaire     String?
+  acteurId        String
+  acteur          Utilisateur @relation(fields: [acteurId], references: [id])
+  dateAction      DateTime    @default(now())
+
+  @@index([entiteType, entiteId])
+  @@schema("public")
+}
