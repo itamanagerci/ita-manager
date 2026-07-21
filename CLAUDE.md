@@ -63,9 +63,19 @@ There is deliberately **no separate technical "Admin" role**. The `authentificat
 
 `AccesUtilisateur.estException` marks a per-user manual override made by RH. It matters for propagation: when a Fonction's default module list changes, `propagerModificationFonction()` (`lib/server-actions/user-provisioning.ts`) bulk-updates every user of that Fonction *except* rows already flagged `estException: true`. New users get their initial grants copied from `FonctionModuleDefaut` via `initialiserAccesDepuisFonction()`.
 
+**Sidebar visibility never special-cases `niveauHierarchique`.** This was an open question carried over from Lot 0 and was explicitly resolved for Lot 1: `direction-generale` — despite being the module a company director would intuitively expect to always see — is gated by `Fonction`/`AccesUtilisateur` exactly like every other module, with zero branching on `niveauHierarchique === "DIRECTEUR"` in `getModulesAccessibles()`. A user with `niveauHierarchique: DIRECTEUR` but the wrong `Fonction` will not see it; RH is expected to assign the "Direction Générale" `Fonction` to whoever should. `niveauHierarchique` still does exactly what Lot 0 said it would — decide who a validation is addressed to inside a page's content (see `DemandeIndex` below) — it just never decides what shows up in the menu.
+
 ### Status/history pattern for future business workflows
 
 `HistoriqueStatut` (in `schema.prisma`) is the generic audit-trail table every future validation circuit (Achat, Congés, AST, etc.) is meant to reuse. It has no FK to business tables — Prisma doesn't support polymorphic relations, so it uses an application-level discriminant (`entiteType` + `entiteId`, indexed together) instead. Write to it via `enregistrerTransition()` in `lib/server-actions/historique.ts`. When you add a business module with a validation workflow, give its table its own `statut` enum/string field and log every transition here rather than inventing a per-module history table.
+
+### Aggregation layer for Direction Générale (`DemandeIndex`)
+
+`DemandeIndex` (schema.prisma) is a **projection of current state**, distinct from `HistoriqueStatut`'s **event log**: one row per business entity (upserted via the same `entiteType`+`entiteId` discriminant, `@@unique` enforced), always reflecting the latest known status — never an append-only history. Every future module with a validation workflow is expected to call both `enregistrerTransition()` and `upsertDemandeIndex()` (`lib/server-actions/demande-index.ts`) on each status change — one for the audit log, one for the DG-level projection — never one without the other.
+
+Convention: a demande counts as "en attente" if `enAttenteValidationDe` (a `NiveauHierarchique`, for circuits that designate a generic role like "Directeur Général") or `enAttenteValidationUtilisateurId` (a specific `Utilisateur`, for circuits like "the requester's direct supervisor") is non-null; "traité" (resolved) once both are null. `upsertDemandeIndex()` always **overwrites** both fields with whatever is passed (defaulting to `null`) rather than merging — so a resolved demande can never keep displaying a stale "waiting on X". This binary signal, not `statutLibelle` (a free string — each module keeps its own status enum/wording), is what drives every DG aggregation query (`src/app/dashboard/direction-generale/{suivi,kpi}/page.tsx`).
+
+The DG pages also need to know which *resolved* demandes were approved vs. rejected (for "montant total validé" in KPI), but `DemandeIndex` deliberately has no structured outcome field for that — it falls back to a keyword heuristic on `statutLibelle` (`tonaliteDepuisStatutLibelle()` in `lib/demande-index-tonalite.ts`: `valid/approuv/accept` → success, `refus/rejet/annul` → danger, `attente` → attention, else neutral), the same one used to color `StatutBadge` in the DG pages. Revisit this if a future module's status wording doesn't match any keyword — it'll silently fall through to "neutre"/excluded-from-validated-total rather than error.
 
 ### Theming
 
@@ -80,6 +90,8 @@ Open Sans is loaded in `src/app/layout.tsx` with `next/font/google` under the CS
 ### Dependency-tree quirk: keep zod pinned to one version
 
 `pnpm-workspace.yaml` has `overrides: zod: ^4.4.3`. Without it, the `shadcn` CLI (a devDependency) transitively pulls in an old `zod@3.25.x` via `@modelcontextprotocol/sdk`, and pnpm's strict linking resolves `@hookform/resolvers/zod` against that old copy instead of the top-level zod — this breaks `zodResolver()`'s TypeScript overloads in `login-form.tsx`/`change-password-form.tsx` with a confusing "Types of property '_def' are incompatible" error even though both are nominally "zod v4". If a fresh `pnpm install` ever reintroduces a duplicate zod, check `pnpm why zod` before debugging the forms themselves.
+
+That same override breaks the `shadcn` CLI itself at runtime: `shadcn` declares `zod: ^3.24.1` and calls `.deepPartial()` internally, a method zod v4 removed — `npx shadcn add <component>` crashes with `TypeError: s.deepPartial is not a function` because `npx` resolves `zod` from this project's (overridden) `node_modules`. Use `pnpm dlx shadcn@latest add <component>` instead — it runs in an isolated temp install outside this project's `pnpm-workspace.yaml`, unaffected by the override.
 
 ### Prisma version note
 

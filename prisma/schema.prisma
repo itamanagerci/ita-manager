@@ -96,6 +96,9 @@ model Utilisateur {
   acces             AccesUtilisateur[] @relation("AccesDuUtilisateur")
   accesModifies     AccesUtilisateur[] @relation("AccesModifiePar")
   actionsHistorique HistoriqueStatut[]
+
+  demandesIndexSoumises DemandeIndex[] @relation("DemandeIndexDemandeur")
+  demandesIndexAValider DemandeIndex[] @relation("DemandeIndexValidateur")
 }
 
 /// Droits d'accès individuels. Initialisés depuis FonctionModuleDefaut à la création
@@ -131,4 +134,47 @@ model HistoriqueStatut {
   dateAction      DateTime    @default(now())
 
   @@index([entiteType, entiteId])
+}
+
+/// Projection d'état courant ("read model") des demandes de n'importe quel
+/// module métier futur, agrégée pour la Direction Générale. Complémentaire
+/// à HistoriqueStatut (log d'événements immuable) : DemandeIndex ne garde
+/// qu'une ligne par entité métier (upsert sur entiteType+entiteId) et
+/// reflète toujours le dernier statut connu. Un futur module appelle
+/// typiquement les deux à chaque transition : enregistrerTransition() pour
+/// l'historique, upsertDemandeIndex() pour la projection DG.
+model DemandeIndex {
+  id         String  @id @default(cuid())
+  typeModule String // code Module d'origine (ex: "achat") — string libre, pas de FK
+  sousModule String // code SousModule d'origine — string libre, pas de FK
+  reference  String? // identifiant lisible (ex: ACH-2026-00042) — numérotation hors scope
+
+  entiteType String // même discriminant applicatif que HistoriqueStatut
+  entiteId   String // @@unique permet l'upsert idempotent à chaque transition
+
+  demandeurId String
+  demandeur   Utilisateur @relation("DemandeIndexDemandeur", fields: [demandeurId], references: [id])
+
+  statutLibelle String // libre — chaque module garde son propre enum de statut
+  montant       Decimal? @db.Decimal(14, 2)
+
+  /// Convention : une demande est "en attente" si l'un des deux champs
+  /// suivants est non-null, "traitée" si les deux sont null.
+  /// upsertDemandeIndex() écrase toujours les deux avec la valeur fournie
+  /// (jamais de fusion partielle), pour qu'une demande résolue ne reste
+  /// jamais affichée comme en attente d'un ancien validateur.
+  enAttenteValidationDe            NiveauHierarchique?
+  enAttenteValidationUtilisateurId String?
+  enAttenteValidationUtilisateur   Utilisateur?        @relation("DemandeIndexValidateur", fields: [enAttenteValidationUtilisateurId], references: [id])
+
+  lienDetail String? // route exacte vers le détail dans le module d'origine, fournie plus tard
+
+  dateSoumission DateTime // date métier réelle, fournie par l'appelant
+  dateMaj        DateTime @updatedAt
+
+  @@unique([entiteType, entiteId])
+  @@index([typeModule])
+  @@index([enAttenteValidationUtilisateurId])
+  @@index([enAttenteValidationDe])
+  @@index([dateSoumission])
 }

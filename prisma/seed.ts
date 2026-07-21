@@ -233,12 +233,34 @@ async function seedFonctions() {
     });
   }
 
-  return { rhFonction, chefChantierFonction };
+  // Fonction Direction Générale : accès aux 3 sous-modules du module DG
+  // uniquement — sert de compte de test pour le Lot 1, indépendamment de
+  // l'accès déjà large (connu, non corrigé) de "Responsable RH".
+  const dgFonction = await prisma.fonction.upsert({
+    where: { nom: "Direction Générale" },
+    update: {},
+    create: { nom: "Direction Générale", description: "Pilotage et validations transverses" },
+  });
+  const sousModulesDg = await prisma.sousModule.findMany({
+    where: { code: { in: ["validations-centralisees", "suivi", "kpi"] } },
+  });
+  for (const sousModule of sousModulesDg) {
+    await prisma.fonctionModuleDefaut.upsert({
+      where: {
+        fonctionId_sousModuleId: { fonctionId: dgFonction.id, sousModuleId: sousModule.id },
+      },
+      update: {},
+      create: { fonctionId: dgFonction.id, sousModuleId: sousModule.id, activeParDefaut: true },
+    });
+  }
+
+  return { rhFonction, chefChantierFonction, dgFonction };
 }
 
 async function seedUtilisateursTest(fonctions: {
   rhFonction: { id: string };
   chefChantierFonction: { id: string };
+  dgFonction: { id: string };
 }) {
   const admin = createAdminClient();
 
@@ -256,6 +278,15 @@ async function seedUtilisateursTest(fonctions: {
       prenom: "Moussa",
       niveauHierarchique: "AGENT" as const,
       fonctionId: fonctions.chefChantierFonction.id,
+    },
+    {
+      email: "dg.test@itamanager.cloud",
+      nom: "Sarr",
+      prenom: "Aminata",
+      // Volontairement DIRECTEUR : permet de tester le filtre
+      // enAttenteValidationDe côté Validations centralisées.
+      niveauHierarchique: "DIRECTEUR" as const,
+      fonctionId: fonctions.dgFonction.id,
     },
   ];
 
