@@ -1,7 +1,27 @@
 import { PrismaClient } from "@prisma/client";
-import { createAdminClient } from "../src/lib/supabase/admin";
+import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 
 const prisma = new PrismaClient();
+
+/**
+ * Client admin Supabase construit directement ici plutôt qu'importé depuis
+ * lib/supabase/admin.ts : ce script tourne en Node.js pur via `tsx` (hors du
+ * bundler Next.js), et lib/supabase/admin.ts importe `server-only`, qui lève
+ * une erreur dès qu'il est chargé en dehors du build Next. La garde
+ * `server-only` reste en place côté app — ce script s'en passe simplement.
+ */
+function createAdminClient() {
+  return createSupabaseClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    },
+  );
+}
 
 interface SousModuleSeed {
   code: string;
@@ -140,7 +160,7 @@ async function seedReferentielModules() {
         where: { moduleId_code: { moduleId: moduleCree.id, code: sousModuleDef.code } },
         update: { nom: sousModuleDef.nom, actif: sousModuleDef.actif ?? true },
         create: {
-          moduleId: module.id,
+          moduleId: moduleCree.id,
           code: sousModuleDef.code,
           nom: sousModuleDef.nom,
           ordre: ordreSousModule,
