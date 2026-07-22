@@ -110,8 +110,8 @@ model Utilisateur {
 
   documentsAjoutes Document[] @relation("UtilisateurAjouteDocument")
 
-  demandesCarburantSoumises     DemandeCarburant[]     @relation("UtilisateurDemandeCarburant")
-  reapprovisionnementsEffectues Reapprovisionnement[]  @relation("UtilisateurReapprovisionnement")
+  demandesCarburantSoumises     DemandeCarburant[]    @relation("UtilisateurDemandeCarburant")
+  reapprovisionnementsEffectues Reapprovisionnement[] @relation("UtilisateurReapprovisionnement")
 
   /// Modèle minimal (un seul niveau, pas d'organigramme complet) — cf.
   /// CLAUDE.md. Pas de onDelete Cascade — supprimer un supérieur désigné
@@ -133,16 +133,28 @@ model Utilisateur {
 
   appelsOffresInities DemandeAppelOffres[]
 
-  projetsDiriges      Projet[]           @relation("ProjetChefDeProjet")
+  projetsDiriges         Projet[]          @relation("ProjetChefDeProjet")
   pointsValidationCoches PointValidation[]
-  notifications       Notification[]
+  notifications          Notification[]
 
-  demandesRHProjetInitiees DemandeRHProjet[]
+  demandesRHProjetInitiees  DemandeRHProjet[]
   lignesContreProposeesPour LigneDemandeRHProjet[] @relation("LigneOuvrierContrePropose")
-  affectationsProjet      AffectationProjet[]      @relation("UtilisateurAffectationOuvrier")
+  affectationsProjet        AffectationProjet[]    @relation("UtilisateurAffectationOuvrier")
 
   demandesMaterielInitiees DemandeMateriel[]
   articlesCrees            Article[]
+
+  magasinsResponsable      Magasin[]                 @relation("UtilisateurResponsableMagasin")
+  mouvementsStockEffectues MouvementStock[]          @relation("UtilisateurMouvementStock")
+  demandesMiseADisposition DemandeMiseADisposition[] @relation("UtilisateurDemandeurDMS")
+  verificationsDMS         DemandeMiseADisposition[] @relation("UtilisateurVerificateurDMS")
+  decisionsDMS             DemandeMiseADisposition[] @relation("UtilisateurDecideurDMS")
+  preparationsBSM          BonSortieMagasin[]        @relation("UtilisateurPreparateurBSM")
+  receptionsBSM            BonSortieMagasin[]        @relation("UtilisateurRecepteurBSM")
+  receptionsBEM            BonEntreeMagasin[]        @relation("UtilisateurReceptionneurBEM")
+  validationsBEM           BonEntreeMagasin[]        @relation("UtilisateurValideurBEM")
+  comptagesInventaire      SessionInventaire[]       @relation("UtilisateurCompteurInventaire")
+  validationsInventaire    SessionInventaire[]       @relation("UtilisateurValideurInventaire")
 }
 
 /// Droits d'accès individuels. Initialisés depuis FonctionModuleDefaut à la création
@@ -279,13 +291,13 @@ model Vehicule {
 }
 
 model Depot {
-  id                   String                 @id @default(cuid())
+  id                   String                @id @default(cuid())
   nom                  String
   localisation         String
   chantiersRattaches   String[]
   /// Mis à jour par les mouvements (réapprovisionnement, validation finale
   /// d'une demande) — jamais recalculé à la volée à la lecture.
-  quantiteStockLitres  Int                    @default(0)
+  quantiteStockLitres  Int                   @default(0)
   demandesCarburant    DemandeCarburant[]
   reapprovisionnements Reapprovisionnement[]
 }
@@ -293,11 +305,11 @@ model Depot {
 /// Pas de circuit de validation — saisie directe par le Responsable
 /// Logistique/Carburant, incrémente Depot.quantiteStockLitres à la création.
 model Reapprovisionnement {
-  id             String       @id @default(cuid())
+  id             String   @id @default(cuid())
   depotId        String
-  depot          Depot        @relation(fields: [depotId], references: [id])
+  depot          Depot    @relation(fields: [depotId], references: [id])
   quantiteLitres Int
-  date           DateTime     @default(now())
+  date           DateTime @default(now())
   fournisseur    String
 
   /// Même pattern non-cascadant que Utilisateur.creeParId/Document.ajouteParId.
@@ -475,10 +487,10 @@ enum StatutAppelOffres {
 }
 
 model DemandeAppelOffres {
-  id            String            @id @default(cuid())
+  id            String   @id @default(cuid())
   nom           String
   client        String
-  montantEstime Decimal           @db.Decimal(14, 2)
+  montantEstime Decimal  @db.Decimal(14, 2)
   description   String
   delaiReponse  DateTime
 
@@ -511,11 +523,11 @@ model PieceJointeAppelOffres {
 /// appel d'offres (DemandeAppelOffres) ne crée jamais automatiquement de
 /// Projet — les deux sous-modules restent indépendants, cf. CLAUDE.md.
 model Projet {
-  id           String    @id @default(cuid())
-  nom          String
-  dateDebut    DateTime
-  dateFin      DateTime?
-  description  String
+  id          String    @id @default(cuid())
+  nom         String
+  dateDebut   DateTime
+  dateFin     DateTime?
+  description String
 
   chefProjetId String
   chefProjet   Utilisateur @relation("ProjetChefDeProjet", fields: [chefProjetId], references: [id])
@@ -561,7 +573,7 @@ model PointValidation {
 /// tâche planifiée — aucune infrastructure cron n'existe dans ce projet.
 /// Cf. CLAUDE.md.
 model Notification {
-  id             String  @id @default(cuid())
+  id             String      @id @default(cuid())
   destinataireId String
   destinataire   Utilisateur @relation(fields: [destinataireId], references: [id], onDelete: Cascade)
 
@@ -607,7 +619,7 @@ model DemandeRHProjet {
 /// grain de la ligne (entiteType "LigneDemandeRHProjet"), pas de la
 /// demande parente. Cf. CLAUDE.md.
 model LigneDemandeRHProjet {
-  id        String @id @default(cuid())
+  id        String          @id @default(cuid())
   demandeId String
   demande   DemandeRHProjet @relation(fields: [demandeId], references: [id], onDelete: Cascade)
 
@@ -623,7 +635,7 @@ model LigneDemandeRHProjet {
   ouvrierContreProposeId      String?
   ouvrierContrePropose        Utilisateur? @relation("LigneOuvrierContrePropose", fields: [ouvrierContreProposeId], references: [id])
   competenceContreProposee    String?
-  tauxJournalierContrePropose Decimal? @db.Decimal(14, 2)
+  tauxJournalierContrePropose Decimal?     @db.Decimal(14, 2)
 
   affectation AffectationProjet?
 
@@ -639,13 +651,13 @@ model LigneDemandeRHProjet {
 /// une affectation active pour le couple (ouvrierId, projetId). Volontairement
 /// permanente pour ce lot (pas de statut/dateFin) — cf. CLAUDE.md.
 model AffectationProjet {
-  id             String  @id @default(cuid())
+  id             String      @id @default(cuid())
   projetId       String
-  projet         Projet  @relation(fields: [projetId], references: [id])
+  projet         Projet      @relation(fields: [projetId], references: [id])
   ouvrierId      String
   ouvrier        Utilisateur @relation("UtilisateurAffectationOuvrier", fields: [ouvrierId], references: [id])
   competence     String
-  tauxJournalier Decimal @db.Decimal(14, 2)
+  tauxJournalier Decimal     @db.Decimal(14, 2)
 
   /// Une affectation naît toujours d'exactement une ligne validée.
   ligneDemandeId String               @unique
@@ -656,14 +668,48 @@ model AffectationProjet {
   @@index([ouvrierId, projetId])
 }
 
-/// Référentiel minimal, même esprit que Vehicule (Lot 3) — à étendre par
-/// le futur Lot 6 (Logistique), pas remplacer. Cf. CLAUDE.md.
+/// Référentiel initialement minimal (Lot 5), étendu au Lot 6 (Livraison A)
+/// en vraie fiche article de magasin. Champs de fiche-inventaire tous
+/// nullable : le seed historique "Bétonnière 350L" (gros équipement
+/// empruntable hors circuit de stock) les garde à null indéfiniment ; seuls
+/// les articles créés via fiche-inventaire les renseignent. Cf. CLAUDE.md.
 model Materiel {
   id          String  @id @default(cuid())
   designation String
   disponible  Boolean @default(true)
 
-  demandesMateriel DemandeMateriel[]
+  reference           String?            @unique
+  categorieId         String?
+  categorie           CategorieMateriel? @relation(fields: [categorieId], references: [id])
+  uniteMesureId       String?
+  uniteMesure         UniteMesure?       @relation(fields: [uniteMesureId], references: [id])
+  magasinId           String?
+  magasin             Magasin?           @relation(fields: [magasinId], references: [id])
+  emplacement         String?
+  fournisseurHabituel String?
+
+  /// Solde persistant, jamais recalculé à la lecture — même pattern que
+  /// Depot.quantiteStockLitres (Lot 3). Modifié UNIQUEMENT via les
+  /// mouvements (entrée/sortie/ajustement), jamais un update générique.
+  quantiteStock              Int?
+  dateCreationStock          DateTime?
+  seuilAlerte                Int?
+  /// Recommandé = seuilAlerte ÷ 2 — champ explicite saisi, jamais calculé.
+  stockSecurite              Int?
+  quantiteReapproStandard    Int?
+  delaiFournisseurMoyenJours Int?
+
+  dateModification DateTime @updatedAt
+
+  demandesMateriel            DemandeMateriel[]
+  mouvementsStock             MouvementStock[]
+  lignesInventaire            LigneInventaire[]
+  demandesReapprovisionnement DemandeReapprovisionnement[]
+  lignesDMS                   LigneDemandeMiseADisposition[]
+  lignesBEM                   LigneBonEntreeMagasin[]
+
+  @@index([categorieId])
+  @@index([magasinId])
 }
 
 enum StatutDemandeMateriel {
@@ -672,9 +718,11 @@ enum StatutDemandeMateriel {
   REFUSEE
 }
 
-/// Circuit complet qui refuse tant qu'aucune Fonction n'a d'accès
-/// Logistique (aucune aujourd'hui) — même politique que les autres cas
-/// "refuser si aucun responsable résolu". Cf. CLAUDE.md.
+/// Débloqué au Lot 6 (Livraison A) : une vraie Fonction "Responsable
+/// Service Logistique" a désormais accès à logistique/magasins, donc
+/// resoudreResponsableLogistiqueMateriel() résout un responsable réel.
+/// Zéro changement de code ici — uniquement un changement de seed. Cf.
+/// CLAUDE.md.
 model DemandeMateriel {
   id            String   @id @default(cuid())
   projetId      String?
@@ -702,13 +750,367 @@ model DemandeMateriel {
 /// restent null et non éditables tant qu'Achat n'existe pas, sur la même
 /// table (pas recréée). Distinct de Materiel (4.4) — cf. CLAUDE.md.
 model Article {
-  id           String   @id @default(cuid())
-  designation  String
-  fournisseur  String?
-  prix         Decimal? @db.Decimal(14, 2)
+  id          String   @id @default(cuid())
+  designation String
+  fournisseur String?
+  prix        Decimal? @db.Decimal(14, 2)
 
   creeParId String?
   creePar   Utilisateur? @relation(fields: [creeParId], references: [id])
 
   dateCreation DateTime @default(now())
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Lot 6 — Service Logistique, Livraison A (stock). Contenu fidèle au
+// document officiel "Workflow_Gestion_Inventaires_ITA" fourni par
+// l'utilisateur — 4 magasins réels, 6 catégories réelles, 6 unités de
+// mesure réelles, champs exacts des formulaires DMS/BSM/BEM/FIC. Cf.
+// CLAUDE.md pour le raisonnement complet (Chef Magasin nommé par magasin,
+// DemandeReapprovisionnement jamais wired à DemandeIndex, etc.).
+// ─────────────────────────────────────────────────────────────────────────
+
+model Magasin {
+  id            String       @id @default(cuid())
+  code          String       @unique
+  nom           String
+  /// Chef Magasin nommé — autorise seul l'étape "vérification stock" d'une
+  /// DMS pour CE magasin (même pattern que DemandeAbsence.superieurId : la
+  /// cible du routage EST l'autorisation, pas un accès sous-module). Pas de
+  /// onDelete Cascade — supprimer un Chef Magasin assigné est bloqué par
+  /// possedeDonneesLiees(), même logique que creeParId/superieurId.
+  responsableId String?
+  responsable   Utilisateur? @relation("UtilisateurResponsableMagasin", fields: [responsableId], references: [id])
+
+  materiels                Materiel[]
+  demandesMiseADisposition DemandeMiseADisposition[]
+  bonsSortieMagasin        BonSortieMagasin[]
+  bonsEntreeMagasin        BonEntreeMagasin[]
+  sessionsInventaire       SessionInventaire[]
+}
+
+/// Table plutôt qu'enum (même raisonnement que Module/SousModule) :
+/// éditable sans migration Prisma. 6 valeurs réelles (pas 8, une ébauche
+/// provisoire sans document réel en avait inventé 8) — Véhicules/Engins en
+/// sont volontairement exclus, suivis séparément via Vehicule (Livraison B).
+model CategorieMateriel {
+  id        String     @id @default(cuid())
+  code      String     @unique
+  nom       String
+  ordre     Int        @default(0)
+  actif     Boolean    @default(true)
+  materiels Materiel[]
+}
+
+/// Table plutôt qu'enum, même raisonnement que CategorieMateriel. 6 valeurs
+/// réelles.
+model UniteMesure {
+  id        String     @id @default(cuid())
+  code      String     @unique
+  nom       String
+  ordre     Int        @default(0)
+  actif     Boolean    @default(true)
+  materiels Materiel[]
+}
+
+enum TypeMouvementStock {
+  ENTREE
+  SORTIE
+  AJUSTEMENT
+}
+
+/// Journal unique pour flux-entree/flux-sortie/inventaire-periodique —
+/// même grain, seul le sens diffère. Créé automatiquement par la
+/// validation d'un BSM (SORTIE), d'un BEM (ENTREE) ou la clôture d'une
+/// session d'inventaire (AJUSTEMENT), jamais directement par un
+/// formulaire. Cf. CLAUDE.md pour le pattern atomique repris de
+/// carburant.ts (Lot 3).
+model MouvementStock {
+  id                     String             @id @default(cuid())
+  materielId             String
+  materiel               Materiel           @relation(fields: [materielId], references: [id])
+  type                   TypeMouvementStock
+  quantite               Int
+  quantiteApresMouvement Int
+  motif                  String?
+
+  effectueParId String?
+  effectuePar   Utilisateur? @relation("UtilisateurMouvementStock", fields: [effectueParId], references: [id])
+
+  date DateTime @default(now())
+
+  @@index([materielId, date])
+  @@index([type])
+}
+
+enum UrgenceDMS {
+  NORMAL
+  URGENT
+}
+
+enum StatutVerificationStock {
+  DISPONIBLE
+  RUPTURE_PARTIELLE
+  RUPTURE_TOTALE
+}
+
+enum DecisionLogisticien {
+  APPROUVEE
+  TRANSFERT_INTER_MAGASIN
+  DEMANDE_ACHAT_DECLENCHEE
+  REFUSEE
+}
+
+enum StatutDMS {
+  EN_ATTENTE_VERIFICATION
+  EN_ATTENTE_DECISION
+  APPROUVEE
+  TRANSFERT_INTER_MAGASIN
+  DEMANDE_ACHAT_DECLENCHEE
+  REFUSEE
+}
+
+/// Demande de Mise à Disposition Stock (flux-sortie) — circuit à 2 acteurs
+/// nommés : Chef Magasin (magasin.responsableId) vérifie la disponibilité,
+/// puis Logisticien (accès logistique/magasins) décide. Refuse la création
+/// si le magasin visé n'a pas de responsable désigné — même règle "refuser
+/// plutôt que fabriquer un routage" que le congé (Lot 4). Cf. CLAUDE.md.
+model DemandeMiseADisposition {
+  id     String @id @default(cuid())
+  numero Int    @unique @default(autoincrement())
+
+  magasinId       String
+  magasin         Magasin @relation(fields: [magasinId], references: [id])
+  chantierService String
+
+  urgence              UrgenceDMS @default(NORMAL)
+  justificationUrgence String?
+
+  demandeurId        String
+  demandeur          Utilisateur @relation("UtilisateurDemandeurDMS", fields: [demandeurId], references: [id])
+  demandeurPoste     String
+  demandeurTelephone String
+
+  statut StatutDMS @default(EN_ATTENTE_VERIFICATION)
+
+  verificationStatut       StatutVerificationStock?
+  verificationObservations String?
+  verifieParId             String?
+  verifiePar               Utilisateur?             @relation("UtilisateurVerificateurDMS", fields: [verifieParId], references: [id])
+  dateVerification         DateTime?
+
+  decision     DecisionLogisticien?
+  motifRefus   String?
+  decideParId  String?
+  decidePar    Utilisateur?         @relation("UtilisateurDecideurDMS", fields: [decideParId], references: [id])
+  dateDecision DateTime?
+
+  /// Renseigné si decision = DEMANDE_ACHAT_DECLENCHEE — lien vers la
+  /// DemandeReapprovisionnement créée/réutilisée à cette occasion.
+  demandeReapprovisionnementId String?
+
+  lignes    LigneDemandeMiseADisposition[]
+  bonSortie BonSortieMagasin?
+
+  dateCreation     DateTime @default(now())
+  dateModification DateTime @updatedAt
+
+  @@index([magasinId, statut])
+  @@index([statut])
+}
+
+model LigneDemandeMiseADisposition {
+  id               String                  @id @default(cuid())
+  demandeId        String
+  demande          DemandeMiseADisposition @relation(fields: [demandeId], references: [id], onDelete: Cascade)
+  materielId       String
+  materiel         Materiel                @relation(fields: [materielId], references: [id])
+  quantiteDemandee Int
+}
+
+enum StatutBonSortie {
+  EMIS
+  RECU
+}
+
+/// Émis par deciderDMS() quand decision = APPROUVEE. Le stock est
+/// décrémenté à ce moment (pattern atomique interactive, cf. CLAUDE.md),
+/// pas à la création de la DMS.
+model BonSortieMagasin {
+  id        String                  @id @default(cuid())
+  numero    Int                     @unique @default(autoincrement())
+  demandeId String                  @unique
+  demande   DemandeMiseADisposition @relation(fields: [demandeId], references: [id])
+
+  magasinId            String
+  magasin              Magasin @relation(fields: [magasinId], references: [id])
+  destinataireChantier String
+
+  statut StatutBonSortie @default(EMIS)
+
+  /// Attribué automatiquement au Chef Magasin qui a vérifié la DMS — pas
+  /// une action séparée, la préparation physique suit la vérification.
+  preparateurId String?
+  preparateur   Utilisateur? @relation("UtilisateurPreparateurBSM", fields: [preparateurId], references: [id])
+  dateEmission  DateTime     @default(now())
+
+  recuParId     String?
+  recuPar       Utilisateur? @relation("UtilisateurRecepteurBSM", fields: [recuParId], references: [id])
+  dateReception DateTime?
+
+  @@index([statut])
+}
+
+enum ConformiteBEM {
+  CONFORME
+  NON_CONFORME_AVEC_RESERVES
+}
+
+enum ActionEcartBEM {
+  RETOUR_FOURNISSEUR
+  AVOIR_A_RECEVOIR
+  REGULARISATION_ADMIN
+  ACCEPTE_AVEC_RESERVE
+}
+
+enum StatutBEM {
+  EN_ATTENTE_VALIDATION
+  VALIDE
+}
+
+/// Bon d'Entrée Magasin (flux-entree) — Chef Magasin réceptionne et
+/// enregistre (auto-attribué, pas de routage nommé : ce n'est pas une
+/// demande adressée à quelqu'un), puis le Logisticien (accès
+/// logistique/magasins) valide. C'est la validation, pas la création, qui
+/// met à jour la fiche inventaire — conforme au document. Cf. CLAUDE.md.
+model BonEntreeMagasin {
+  id     String @id @default(cuid())
+  numero Int    @unique @default(autoincrement())
+
+  demandeReapprovisionnementId String?
+  demandeReapprovisionnement   DemandeReapprovisionnement? @relation(fields: [demandeReapprovisionnementId], references: [id])
+
+  bonLivraisonFournisseurNumero String
+  dateReception                 DateTime
+  magasinId                     String
+  magasin                       Magasin  @relation(fields: [magasinId], references: [id])
+  fournisseur                   String
+
+  conformite  ConformiteBEM?
+  reserves    String?
+  actionEcart ActionEcartBEM?
+
+  statut StatutBEM @default(EN_ATTENTE_VALIDATION)
+
+  receptionneParId String?
+  receptionnePar   Utilisateur? @relation("UtilisateurReceptionneurBEM", fields: [receptionneParId], references: [id])
+
+  valideParId    String?
+  validePar      Utilisateur? @relation("UtilisateurValideurBEM", fields: [valideParId], references: [id])
+  dateValidation DateTime?
+
+  lignes LigneBonEntreeMagasin[]
+
+  dateCreation DateTime @default(now())
+
+  @@index([magasinId, statut])
+  @@index([statut])
+}
+
+model LigneBonEntreeMagasin {
+  id            String           @id @default(cuid())
+  bemId         String
+  bem           BonEntreeMagasin @relation(fields: [bemId], references: [id], onDelete: Cascade)
+  materielId    String
+  materiel      Materiel         @relation(fields: [materielId], references: [id])
+  quantiteRecue Int
+}
+
+enum TypeInventaire {
+  MENSUEL
+  TRIMESTRIEL
+  SEMESTRIEL
+  ANNUEL
+  EXCEPTIONNEL
+}
+
+enum StatutSessionInventaire {
+  EN_COURS
+  CLOTUREE
+}
+
+/// Fiche de Comptage (inventaire-periodique). cloturerSessionInventaire()
+/// applique chaque écart en SET direct (quantiteStock = quantitePhysique),
+/// pas un increment/decrement — une correction vers une vérité
+/// physiquement constatée, pas une opération concurrente à protéger comme
+/// une sortie. Cf. CLAUDE.md pour la simplification de concurrence assumée.
+model SessionInventaire {
+  id             String                  @id @default(cuid())
+  numero         Int                     @unique @default(autoincrement())
+  type           TypeInventaire
+  magasinId      String
+  magasin        Magasin                 @relation(fields: [magasinId], references: [id])
+  equipeComptage String?
+  statut         StatutSessionInventaire @default(EN_COURS)
+
+  effectueParId String?
+  effectuePar   Utilisateur? @relation("UtilisateurCompteurInventaire", fields: [effectueParId], references: [id])
+
+  valideParId    String?
+  validePar      Utilisateur? @relation("UtilisateurValideurInventaire", fields: [valideParId], references: [id])
+  dateValidation DateTime?
+
+  lignes LigneInventaire[]
+
+  dateCreation     DateTime @default(now())
+  dateModification DateTime @updatedAt
+
+  @@index([statut])
+  @@index([magasinId])
+}
+
+/// Appartient entièrement à sa session (comme PointValidation à Projet) —
+/// cascade correcte, pas un enregistrement d'audit d'une tierce action.
+model LigneInventaire {
+  id                String            @id @default(cuid())
+  sessionId         String
+  session           SessionInventaire @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  materielId        String
+  materiel          Materiel          @relation(fields: [materielId], references: [id])
+  quantiteTheorique Int
+  quantitePhysique  Int
+  ecart             Int
+  commentaire       String?
+
+  @@unique([sessionId, materielId])
+}
+
+enum StatutDemandeReapprovisionnement {
+  EN_ATTENTE_ACHAT
+}
+
+/// Créée automatiquement (détection passive au chargement de la page
+/// seuil-alerte, OU décision DMS "Demande d'achat déclenchée") — jamais
+/// par un humain directement. Suivie via enregistrerTransition() pour
+/// l'audit, mais DÉLIBÉRÉMENT jamais wired à upsertDemandeIndex() : aucune
+/// cible de routage réelle n'existe tant que le Lot 7 (Achat) n'existe pas
+/// — l'écrire avec les deux champs de validation à null la ferait lire
+/// comme "traitée", le piège que CLAUDE.md interdit explicitement. Un seul
+/// statut pour ce lot ; Lot 7 étendra le cycle de vie via sa propre
+/// migration. Cf. CLAUDE.md.
+model DemandeReapprovisionnement {
+  id         String                           @id @default(cuid())
+  materielId String
+  materiel   Materiel                         @relation(fields: [materielId], references: [id])
+  statut     StatutDemandeReapprovisionnement @default(EN_ATTENTE_ACHAT)
+
+  quantiteStockConstatee Int
+  seuilAlerteConstate    Int
+
+  dateCreation DateTime @default(now())
+
+  bonsEntreeMagasin BonEntreeMagasin[]
+
+  @@unique([materielId, statut])
+  @@index([statut])
 }

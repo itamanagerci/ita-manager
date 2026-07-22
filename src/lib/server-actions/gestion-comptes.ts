@@ -138,6 +138,17 @@ async function possedeDonneesLiees(utilisateurId: string): Promise<boolean> {
     affectations,
     demandesMateriel,
     articlesCrees,
+    magasinsResponsable,
+    demandesMiseADisposition,
+    verificationsDMS,
+    decisionsDMS,
+    preparationsBSM,
+    receptionsBSM,
+    receptionsBEM,
+    validationsBEM,
+    comptagesInventaire,
+    validationsInventaire,
+    mouvementsStock,
   ] = await Promise.all([
     prisma.historiqueStatut.count({ where: { acteurId: utilisateurId } }),
     prisma.demandeIndex.count({
@@ -171,6 +182,17 @@ async function possedeDonneesLiees(utilisateurId: string): Promise<boolean> {
     prisma.affectationProjet.count({ where: { ouvrierId: utilisateurId } }),
     prisma.demandeMateriel.count({ where: { initiateurId: utilisateurId } }),
     prisma.article.count({ where: { creeParId: utilisateurId } }),
+    prisma.magasin.count({ where: { responsableId: utilisateurId } }),
+    prisma.demandeMiseADisposition.count({ where: { demandeurId: utilisateurId } }),
+    prisma.demandeMiseADisposition.count({ where: { verifieParId: utilisateurId } }),
+    prisma.demandeMiseADisposition.count({ where: { decideParId: utilisateurId } }),
+    prisma.bonSortieMagasin.count({ where: { preparateurId: utilisateurId } }),
+    prisma.bonSortieMagasin.count({ where: { recuParId: utilisateurId } }),
+    prisma.bonEntreeMagasin.count({ where: { receptionneParId: utilisateurId } }),
+    prisma.bonEntreeMagasin.count({ where: { valideParId: utilisateurId } }),
+    prisma.sessionInventaire.count({ where: { effectueParId: utilisateurId } }),
+    prisma.sessionInventaire.count({ where: { valideParId: utilisateurId } }),
+    prisma.mouvementStock.count({ where: { effectueParId: utilisateurId } }),
   ]);
 
   return (
@@ -192,7 +214,18 @@ async function possedeDonneesLiees(utilisateurId: string): Promise<boolean> {
     lignesContreProposees > 0 ||
     affectations > 0 ||
     demandesMateriel > 0 ||
-    articlesCrees > 0
+    articlesCrees > 0 ||
+    magasinsResponsable > 0 ||
+    demandesMiseADisposition > 0 ||
+    verificationsDMS > 0 ||
+    decisionsDMS > 0 ||
+    preparationsBSM > 0 ||
+    receptionsBSM > 0 ||
+    receptionsBEM > 0 ||
+    validationsBEM > 0 ||
+    comptagesInventaire > 0 ||
+    validationsInventaire > 0 ||
+    mouvementsStock > 0
   );
 }
 

@@ -183,6 +183,63 @@ async function seedReferentielModules() {
   }
 }
 
+/// Référentiels Service Logistique (Lot 6, Livraison A) — contenu réel tiré
+/// du document officiel "Workflow_Gestion_Inventaires_ITA" (4 magasins, 6
+/// catégories, 6 unités de mesure), pas inventé. Tables plutôt qu'enums :
+/// éditables sans migration si une catégorie/unité doit être corrigée. Cf.
+/// CLAUDE.md.
+async function seedMagasins() {
+  const magasins = [
+    { code: "MAG-01", nom: "Central (Abidjan)" },
+    { code: "MAG-02", nom: "Bouaké" },
+    { code: "MAG-03", nom: "Botro" },
+    { code: "MAG-04", nom: "Base vie" },
+  ];
+  for (const magasin of magasins) {
+    await prisma.magasin.upsert({
+      where: { code: magasin.code },
+      update: { nom: magasin.nom },
+      create: magasin,
+    });
+  }
+}
+
+async function seedCategoriesMateriel() {
+  const categories = [
+    { code: "PETIT_MATERIEL", nom: "Petit matériel" },
+    { code: "MOBILIER", nom: "Mobilier" },
+    { code: "EPI", nom: "EPI" },
+    { code: "FOURNITURE", nom: "Fourniture" },
+    { code: "ENTRETIEN", nom: "Entretien" },
+    { code: "CONSOMMABLE", nom: "Consommable" },
+  ];
+  for (const [ordre, categorie] of categories.entries()) {
+    await prisma.categorieMateriel.upsert({
+      where: { code: categorie.code },
+      update: { nom: categorie.nom },
+      create: { ...categorie, ordre },
+    });
+  }
+}
+
+async function seedUnitesMesure() {
+  const unites = [
+    { code: "PIECE", nom: "Pièce" },
+    { code: "KG", nom: "Kg" },
+    { code: "LITRE", nom: "Litre" },
+    { code: "METRE", nom: "Mètre" },
+    { code: "BOITE", nom: "Boîte" },
+    { code: "AUTRE", nom: "Autre" },
+  ];
+  for (const [ordre, unite] of unites.entries()) {
+    await prisma.uniteMesure.upsert({
+      where: { code: unite.code },
+      update: { nom: unite.nom },
+      create: { ...unite, ordre },
+    });
+  }
+}
+
 async function seedFonctions() {
   const tousLesSousModulesSauf = async (codesExclus: string[]) =>
     prisma.sousModule.findMany({
@@ -345,12 +402,85 @@ async function seedFonctions() {
     });
   }
 
+  // Fonction Responsable Service Logistique (Lot 6, "Logisticien") : accès
+  // aux 6 sous-modules de la Livraison A. Débloque au passage
+  // resoudreResponsableLogistiqueMateriel() (Lot 5, ciblait déjà
+  // logistique/magasins) — zéro changement de code, uniquement ce seed.
+  // Distincte de "Responsable Logistique/Carburant" (Lot 3, scopée à
+  // carburant/depots) et de "Chef de Magasin" (rôle opérationnel local,
+  // ci-dessous).
+  const responsableServiceLogistiqueFonction = await prisma.fonction.upsert({
+    where: { nom: "Responsable Service Logistique" },
+    update: {},
+    create: {
+      nom: "Responsable Service Logistique",
+      description:
+        "Pilotage global du stock : magasins, fiche inventaire, décisions DMS/BEM, seuils d'alerte (distinct de Responsable Logistique/Carburant)",
+    },
+  });
+  const codesResponsableServiceLogistique = [
+    "magasins",
+    "fiche-inventaire",
+    "flux-sortie",
+    "flux-entree",
+    "inventaire-periodique",
+    "seuil-alerte",
+  ];
+  const sousModulesResponsableServiceLogistique = await prisma.sousModule.findMany({
+    where: { code: { in: codesResponsableServiceLogistique } },
+  });
+  for (const sousModule of sousModulesResponsableServiceLogistique) {
+    await prisma.fonctionModuleDefaut.upsert({
+      where: {
+        fonctionId_sousModuleId: {
+          fonctionId: responsableServiceLogistiqueFonction.id,
+          sousModuleId: sousModule.id,
+        },
+      },
+      update: {},
+      create: {
+        fonctionId: responsableServiceLogistiqueFonction.id,
+        sousModuleId: sousModule.id,
+        activeParDefaut: true,
+      },
+    });
+  }
+
+  // Fonction Chef de Magasin (Lot 6) : accès opérationnel local
+  // (flux-sortie/flux-entree/inventaire-periodique) — pas magasins/
+  // fiche-inventaire/seuil-alerte, réservés au rôle stratégique. L'autorité
+  // réelle sur "vérifier une DMS" vient de Magasin.responsableId (routage
+  // nommé), cette Fonction ne fait qu'ouvrir l'accès aux pages.
+  const chefMagasinFonction = await prisma.fonction.upsert({
+    where: { nom: "Chef de Magasin" },
+    update: {},
+    create: {
+      nom: "Chef de Magasin",
+      description: "Vérification des DMS, réception BEM et comptages d'inventaire pour son magasin",
+    },
+  });
+  const codesChefMagasin = ["flux-sortie", "flux-entree", "inventaire-periodique"];
+  const sousModulesChefMagasin = await prisma.sousModule.findMany({
+    where: { code: { in: codesChefMagasin } },
+  });
+  for (const sousModule of sousModulesChefMagasin) {
+    await prisma.fonctionModuleDefaut.upsert({
+      where: {
+        fonctionId_sousModuleId: { fonctionId: chefMagasinFonction.id, sousModuleId: sousModule.id },
+      },
+      update: {},
+      create: { fonctionId: chefMagasinFonction.id, sousModuleId: sousModule.id, activeParDefaut: true },
+    });
+  }
+
   return {
     rhFonction,
     chefChantierFonction,
     dgFonction,
     logistiqueFonction,
     directionTechniqueFonction,
+    responsableServiceLogistiqueFonction,
+    chefMagasinFonction,
   };
 }
 
@@ -360,6 +490,8 @@ async function seedUtilisateursTest(fonctions: {
   dgFonction: { id: string };
   logistiqueFonction: { id: string };
   directionTechniqueFonction: { id: string };
+  responsableServiceLogistiqueFonction: { id: string };
+  chefMagasinFonction: { id: string };
 }) {
   const admin = createAdminClient();
 
@@ -401,6 +533,23 @@ async function seedUtilisateursTest(fonctions: {
       niveauHierarchique: "CHEF_SERVICE" as const,
       fonctionId: fonctions.directionTechniqueFonction.id,
     },
+    {
+      email: "responsable-logistique.test@itamanager.cloud",
+      nom: "Sow",
+      prenom: "Ousmane",
+      niveauHierarchique: "CHEF_SERVICE" as const,
+      fonctionId: fonctions.responsableServiceLogistiqueFonction.id,
+    },
+    {
+      email: "chef-magasin.test@itamanager.cloud",
+      nom: "Traoré",
+      prenom: "Aïssata",
+      niveauHierarchique: "AGENT" as const,
+      fonctionId: fonctions.chefMagasinFonction.id,
+      // Assigné responsable de MAG-01 après création (cf. boucle ci-dessous)
+      // — rend le circuit DMS→BSM testable de bout en bout.
+      magasinResponsableCode: "MAG-01",
+    },
   ];
 
   for (const compte of comptesTest) {
@@ -441,6 +590,13 @@ async function seedUtilisateursTest(fonctions: {
           estException: false,
         })),
         skipDuplicates: true,
+      });
+    }
+
+    if ("magasinResponsableCode" in compte && compte.magasinResponsableCode) {
+      await prisma.magasin.update({
+        where: { code: compte.magasinResponsableCode },
+        data: { responsableId: utilisateur.id },
       });
     }
 
@@ -496,12 +652,72 @@ async function seedDirectionTechniqueTest() {
   }
 }
 
+/// Fiches article réelles (Lot 6, Livraison A) — rattachées à MAG-01,
+/// durables. "Gants de manutention" volontairement sous son seuil pour que
+/// seuil-alerte ait quelque chose à détecter sans manipulation préalable.
+async function seedLogistiqueTest() {
+  const mag01 = await prisma.magasin.findUniqueOrThrow({ where: { code: "MAG-01" } });
+  const categorieEpi = await prisma.categorieMateriel.findUniqueOrThrow({ where: { code: "EPI" } });
+  const categorieConsommable = await prisma.categorieMateriel.findUniqueOrThrow({
+    where: { code: "CONSOMMABLE" },
+  });
+  const unitePiece = await prisma.uniteMesure.findUniqueOrThrow({ where: { code: "PIECE" } });
+  const uniteBoite = await prisma.uniteMesure.findUniqueOrThrow({ where: { code: "BOITE" } });
+
+  const materiels = [
+    {
+      reference: "ART-00001",
+      designation: "Casque de chantier",
+      categorieId: categorieEpi.id,
+      uniteMesureId: unitePiece.id,
+      quantiteStock: 42,
+      seuilAlerte: 15,
+      stockSecurite: 8,
+    },
+    {
+      reference: "ART-00002",
+      designation: "Gants de manutention (paire)",
+      categorieId: categorieEpi.id,
+      uniteMesureId: uniteBoite.id,
+      quantiteStock: 8,
+      seuilAlerte: 20,
+      stockSecurite: 10,
+    },
+    {
+      reference: "ART-00003",
+      designation: "Disque à tronçonner Ø230mm",
+      categorieId: categorieConsommable.id,
+      uniteMesureId: unitePiece.id,
+      quantiteStock: 30,
+      seuilAlerte: 10,
+      stockSecurite: 5,
+    },
+  ];
+
+  for (const materiel of materiels) {
+    const existant = await prisma.materiel.findFirst({ where: { designation: materiel.designation } });
+    if (existant) continue;
+    await prisma.materiel.create({
+      data: {
+        ...materiel,
+        magasinId: mag01.id,
+        disponible: true,
+        dateCreationStock: new Date(),
+      },
+    });
+  }
+}
+
 async function main() {
   await seedReferentielModules();
+  await seedMagasins();
+  await seedCategoriesMateriel();
+  await seedUnitesMesure();
   const fonctions = await seedFonctions();
   await seedUtilisateursTest(fonctions);
   await seedCarburantTest();
   await seedDirectionTechniqueTest();
+  await seedLogistiqueTest();
 }
 
 main()
