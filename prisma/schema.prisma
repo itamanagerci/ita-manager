@@ -112,6 +112,24 @@ model Utilisateur {
 
   demandesCarburantSoumises     DemandeCarburant[]     @relation("UtilisateurDemandeCarburant")
   reapprovisionnementsEffectues Reapprovisionnement[]  @relation("UtilisateurReapprovisionnement")
+
+  /// Modèle minimal (un seul niveau, pas d'organigramme complet) — cf.
+  /// CLAUDE.md. Pas de onDelete Cascade — supprimer un supérieur désigné
+  /// est bloqué par possedeDonneesLiees(), même logique que creeParId.
+  superieurId String?
+  superieur   Utilisateur?  @relation("UtilisateurSuperieur", fields: [superieurId], references: [id])
+  subordonnes Utilisateur[] @relation("UtilisateurSuperieur")
+
+  profilEmploye ProfilEmploye?
+
+  demandesAbsenceSoumises DemandeAbsence[] @relation("UtilisateurDemandeAbsence")
+  demandesAbsenceAValider DemandeAbsence[] @relation("UtilisateurValidationAbsence")
+
+  missionsConcernees DemandeMission[] @relation("UtilisateurMissionConcernee")
+  missionsInitiees   DemandeMission[] @relation("UtilisateurMissionInitiee")
+
+  relevesActivite ReleveActivite[] @relation("UtilisateurReleveOuvrier")
+  relevesSaisis   ReleveActivite[] @relation("UtilisateurReleveSaisiPar")
 }
 
 /// Droits d'accès individuels. Initialisés depuis FonctionModuleDefaut à la création
@@ -298,4 +316,135 @@ model DemandeCarburant {
   @@index([vehiculeId, statut])
   @@index([statut])
   @@index([demandeurId])
+}
+
+enum TypeProfilEmploye {
+  AGENT
+  SOUS_TRAITANT
+  OUVRIER
+}
+
+/// Lot 4 — DARH. Relation 1:1 OPTIONNELLE avec Utilisateur (onDelete: Cascade
+/// — appartient entièrement au compte, même logique que AccesUtilisateur,
+/// pas un enregistrement d'audit sur l'action de quelqu'un d'autre) : un
+/// compte peut exister sans profil RH complété.
+model ProfilEmploye {
+  id            String            @id @default(cuid())
+  utilisateurId String            @unique
+  utilisateur   Utilisateur       @relation(fields: [utilisateurId], references: [id], onDelete: Cascade)
+  typeProfil    TypeProfilEmploye
+  poste         String
+  service       String
+  dateEntree    DateTime
+  soldeConges   Int               @default(0)
+
+  salaireFixe         Decimal? @db.Decimal(14, 2)
+  entrepriseRattachee String?
+  tauxJournalier      Decimal? @db.Decimal(14, 2)
+}
+
+enum TypeAbsence {
+  CONGE
+  PERMISSION
+}
+
+enum StatutAbsence {
+  EN_ATTENTE_SUPERIEUR
+  VALIDEE
+  REFUSEE
+}
+
+model DemandeAbsence {
+  id                 String        @id @default(cuid())
+  employeId          String
+  employe            Utilisateur   @relation("UtilisateurDemandeAbsence", fields: [employeId], references: [id])
+  type               TypeAbsence
+  dateDebut          DateTime
+  dateFin            DateTime? // requis si CONGE
+  dureeHeures        Int? // requis si PERMISSION
+  motif              String
+  statut             StatutAbsence @default(EN_ATTENTE_SUPERIEUR)
+  motifRefus         String?
+  impacteSoldeConges Boolean // dérivé du type à la création, jamais un input utilisateur
+
+  /// Figé depuis employe.superieurId à la création — routage stable même si
+  /// le supérieur de l'employé change ensuite. Cf. CLAUDE.md.
+  superieurId String
+  superieur   Utilisateur @relation("UtilisateurValidationAbsence", fields: [superieurId], references: [id])
+
+  dateCreation     DateTime @default(now())
+  dateModification DateTime @updatedAt
+
+  @@index([employeId])
+  @@index([superieurId, statut])
+}
+
+enum TypeMission {
+  CHANTIER
+  FORMATION
+  REPRESENTATION_CLIENT
+  AUTRE
+}
+
+enum StatutMission {
+  EN_ATTENTE_RH
+  VALIDEE_RH
+  REFUSEE
+}
+
+/// Se termine à VALIDEE_RH pour ce lot — le futur Lot 8 (DFC) reprendra les
+/// missions à ce statut pour l'étape de paiement. Cf. CLAUDE.md.
+model DemandeMission {
+  id                String      @id @default(cuid())
+  employeConcerneId String
+  employeConcerne   Utilisateur @relation("UtilisateurMissionConcernee", fields: [employeConcerneId], references: [id])
+
+  /// Peut différer de employeConcerneId (un supérieur soumet pour son équipe).
+  initiateurId String
+  initiateur   Utilisateur @relation("UtilisateurMissionInitiee", fields: [initiateurId], references: [id])
+
+  typeMission TypeMission
+  description String
+  lieu        String
+  dateDebut   DateTime
+  dateFin     DateTime
+
+  fraisDeclares Decimal? @db.Decimal(14, 2)
+  motifFrais    String?
+
+  statut     StatutMission @default(EN_ATTENTE_RH)
+  motifRefus String?
+
+  dateCreation     DateTime @default(now())
+  dateModification DateTime @updatedAt
+
+  @@index([employeConcerneId])
+  @@index([statut])
+}
+
+enum StatutReleveActivite {
+  SOUMIS
+  VALIDE_RH
+}
+
+/// Structure et circuit réels dès ce lot, mais volontairement sans
+/// référentiel Projet (projetLibelle reste du texte libre) en attendant le
+/// Lot 5 (Direction Technique) — cf. CLAUDE.md.
+model ReleveActivite {
+  id              String               @id @default(cuid())
+  ouvrierId       String
+  ouvrier         Utilisateur          @relation("UtilisateurReleveOuvrier", fields: [ouvrierId], references: [id])
+  projetLibelle   String
+  periode         String
+  joursTravailles Int
+  statut          StatutReleveActivite @default(SOUMIS)
+
+  saisiParId String
+  saisiPar   Utilisateur @relation("UtilisateurReleveSaisiPar", fields: [saisiParId], references: [id])
+
+  dateCreation     DateTime @default(now())
+  dateModification DateTime @updatedAt
+
+  @@index([ouvrierId])
+  @@index([statut])
 }

@@ -126,6 +126,10 @@ async function possedeDonneesLiees(utilisateurId: string): Promise<boolean> {
     documentsAjoutes,
     demandesCarburant,
     reapprovisionnements,
+    estSuperieurDe,
+    demandesAbsence,
+    demandesMission,
+    releves,
   ] = await Promise.all([
     prisma.historiqueStatut.count({ where: { acteurId: utilisateurId } }),
     prisma.demandeIndex.count({
@@ -141,6 +145,16 @@ async function possedeDonneesLiees(utilisateurId: string): Promise<boolean> {
     prisma.document.count({ where: { ajouteParId: utilisateurId } }),
     prisma.demandeCarburant.count({ where: { demandeurId: utilisateurId } }),
     prisma.reapprovisionnement.count({ where: { effectueParId: utilisateurId } }),
+    prisma.utilisateur.count({ where: { superieurId: utilisateurId } }),
+    prisma.demandeAbsence.count({
+      where: { OR: [{ employeId: utilisateurId }, { superieurId: utilisateurId }] },
+    }),
+    prisma.demandeMission.count({
+      where: { OR: [{ employeConcerneId: utilisateurId }, { initiateurId: utilisateurId }] },
+    }),
+    prisma.releveActivite.count({
+      where: { OR: [{ ouvrierId: utilisateurId }, { saisiParId: utilisateurId }] },
+    }),
   ]);
 
   return (
@@ -150,7 +164,11 @@ async function possedeDonneesLiees(utilisateurId: string): Promise<boolean> {
     comptesCrees > 0 ||
     documentsAjoutes > 0 ||
     demandesCarburant > 0 ||
-    reapprovisionnements > 0
+    reapprovisionnements > 0 ||
+    estSuperieurDe > 0 ||
+    demandesAbsence > 0 ||
+    demandesMission > 0 ||
+    releves > 0
   );
 }
 

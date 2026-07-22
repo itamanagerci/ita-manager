@@ -1,5 +1,5 @@
 import { notFound, redirect } from "next/navigation";
-import { getCurrentUtilisateur } from "@/lib/server-actions/acces";
+import { getCurrentUtilisateur, possedeAccesSousModule } from "@/lib/server-actions/acces";
 import { requireAccesModule } from "@/lib/server-actions/guards";
 import { prisma } from "@/lib/prisma";
 import { PageHeader } from "@/components/ui/composed/page-header";
@@ -7,6 +7,13 @@ import { StatutBadge } from "@/components/ui/composed/statut-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FonctionNiveauForm } from "@/components/gestion-comptes/fonction-niveau-form";
 import { AccesIndividuelsForm } from "@/components/gestion-comptes/acces-individuels-form";
+import { ProfilRHForm } from "@/components/rh/profil-rh-form";
+
+const LABEL_TYPE_PROFIL: Record<string, string> = {
+  AGENT: "Agent",
+  SOUS_TRAITANT: "Sous-traitant",
+  OUVRIER: "Ouvrier",
+};
 
 const LABEL_NIVEAU: Record<string, string> = {
   DIRECTEUR: "Directeur",
@@ -30,21 +37,32 @@ export default async function DetailUtilisateurPage({ params }: DetailUtilisateu
 
   const { utilisateurId } = await params;
 
-  const [cible, fonctions, modules, accesActuel] = await Promise.all([
-    prisma.utilisateur.findUnique({
-      where: { id: utilisateurId },
-      include: { fonction: true, creePar: { select: { nom: true, prenom: true } } },
-    }),
-    prisma.fonction.findMany({ where: { actif: true }, orderBy: { nom: "asc" } }),
-    prisma.module.findMany({
-      orderBy: { ordre: "asc" },
-      include: { sousModules: { where: { actif: true }, orderBy: { ordre: "asc" } } },
-    }),
-    prisma.accesUtilisateur.findMany({
-      where: { utilisateurId, actif: true },
-      select: { sousModuleId: true },
-    }),
-  ]);
+  const [cible, fonctions, modules, accesActuel, peutGererProfilsRH, utilisateursActifs] =
+    await Promise.all([
+      prisma.utilisateur.findUnique({
+        where: { id: utilisateurId },
+        include: {
+          fonction: true,
+          creePar: { select: { nom: true, prenom: true } },
+          profilEmploye: true,
+        },
+      }),
+      prisma.fonction.findMany({ where: { actif: true }, orderBy: { nom: "asc" } }),
+      prisma.module.findMany({
+        orderBy: { ordre: "asc" },
+        include: { sousModules: { where: { actif: true }, orderBy: { ordre: "asc" } } },
+      }),
+      prisma.accesUtilisateur.findMany({
+        where: { utilisateurId, actif: true },
+        select: { sousModuleId: true },
+      }),
+      possedeAccesSousModule(utilisateurCourant.id, "rh", "creation-profil"),
+      prisma.utilisateur.findMany({
+        where: { statut: "ACTIF" },
+        select: { id: true, nom: true, prenom: true },
+        orderBy: { nom: "asc" },
+      }),
+    ]);
 
   if (!cible) notFound();
 
@@ -136,6 +154,68 @@ export default async function DetailUtilisateurPage({ params }: DetailUtilisateu
           />
         </CardContent>
       </Card>
+
+      {(peutGererProfilsRH || cible.profilEmploye) && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Profil RH</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {peutGererProfilsRH ? (
+              <ProfilRHForm
+                utilisateurId={cible.id}
+                profilExistant={
+                  cible.profilEmploye
+                    ? {
+                        typeProfil: cible.profilEmploye.typeProfil,
+                        poste: cible.profilEmploye.poste,
+                        service: cible.profilEmploye.service,
+                        dateEntree: cible.profilEmploye.dateEntree,
+                        soldeConges: cible.profilEmploye.soldeConges,
+                        salaireFixe: cible.profilEmploye.salaireFixe
+                          ? Number(cible.profilEmploye.salaireFixe)
+                          : null,
+                        entrepriseRattachee: cible.profilEmploye.entrepriseRattachee,
+                        tauxJournalier: cible.profilEmploye.tauxJournalier
+                          ? Number(cible.profilEmploye.tauxJournalier)
+                          : null,
+                      }
+                    : null
+                }
+                superieurActuelId={cible.superieurId}
+                utilisateursDisponibles={utilisateursActifs}
+              />
+            ) : cible.profilEmploye ? (
+              <div className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-3">
+                <div>
+                  <p className="text-xs text-muted-foreground">Type</p>
+                  <p className="font-medium">
+                    {LABEL_TYPE_PROFIL[cible.profilEmploye.typeProfil]}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Poste</p>
+                  <p className="font-medium">{cible.profilEmploye.poste}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Service</p>
+                  <p className="font-medium">{cible.profilEmploye.service}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Date d&apos;entrée</p>
+                  <p className="font-medium">
+                    {cible.profilEmploye.dateEntree.toLocaleDateString("fr-FR")}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Solde de congés</p>
+                  <p className="font-medium">{cible.profilEmploye.soldeConges} jours</p>
+                </div>
+              </div>
+            ) : null}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
