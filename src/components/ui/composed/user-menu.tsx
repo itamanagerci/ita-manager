@@ -1,7 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { LogOut, User } from "lucide-react";
+import { LogOut, User, Users } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -18,13 +19,14 @@ interface UserMenuProps {
   nom: string;
   prenom: string;
   fonction: string;
+  peutGererComptes: boolean;
 }
 
 function initiales(nom: string, prenom: string) {
   return `${prenom.charAt(0)}${nom.charAt(0)}`.toUpperCase();
 }
 
-export function UserMenu({ nom, prenom, fonction }: UserMenuProps) {
+export function UserMenu({ nom, prenom, fonction, peutGererComptes }: UserMenuProps) {
   const router = useRouter();
 
   async function deconnecter() {
@@ -46,7 +48,7 @@ export function UserMenu({ nom, prenom, fonction }: UserMenuProps) {
           </span>
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
+      <DropdownMenuContent align="end" className="w-64">
         <DropdownMenuLabel className="flex flex-col">
           <span className="font-semibold">
             {prenom} {nom}
@@ -58,7 +60,16 @@ export function UserMenu({ nom, prenom, fonction }: UserMenuProps) {
           <User className="size-4" />
           Mon profil
         </DropdownMenuItem>
-        <DropdownMenuItem onSelect={deconnecter}>
+        {peutGererComptes && (
+          <DropdownMenuItem asChild>
+            <Link href="/dashboard/authentification-roles/gestion-comptes-acces">
+              <Users className="size-4" />
+              Gestion des comptes
+            </Link>
+          </DropdownMenuItem>
+        )}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem variant="destructive" onSelect={deconnecter}>
           <LogOut className="size-4" />
           Se déconnecter
         </DropdownMenuItem>

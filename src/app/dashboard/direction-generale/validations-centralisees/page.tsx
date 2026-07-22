@@ -7,7 +7,10 @@ import { tonaliteDepuisStatutLibelle } from "@/lib/demande-index-tonalite";
 import { prisma } from "@/lib/prisma";
 import { PageHeader } from "@/components/ui/composed/page-header";
 import { StatutBadge } from "@/components/ui/composed/statut-badge";
+import { EmptyState } from "@/components/ui/composed/empty-state";
 import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { NativeSelect } from "@/components/ui/native-select";
 import {
   Table,
   TableBody,
@@ -56,11 +59,11 @@ export default async function ValidationsCentraliseesPage({
         <label htmlFor="module" className="text-sm text-muted-foreground">
           Module
         </label>
-        <select
+        <NativeSelect
           id="module"
           name="module"
           defaultValue={moduleFiltre ?? ""}
-          className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+          className="w-auto"
         >
           <option value="">Tous les modules</option>
           {modulesMetier.map((module) => (
@@ -68,25 +71,17 @@ export default async function ValidationsCentraliseesPage({
               {module.nom}
             </option>
           ))}
-        </select>
-        <button
-          type="submit"
-          className="h-9 rounded-md border border-input bg-background px-3 text-sm font-medium hover:bg-muted"
-        >
+        </NativeSelect>
+        <Button type="submit" variant="outline">
           Filtrer
-        </button>
+        </Button>
       </form>
 
       {demandes.length === 0 ? (
-        <Card>
-          <CardContent className="flex flex-col items-center gap-1 py-10 text-center">
-            <p className="font-medium text-foreground">Aucune demande en attente</p>
-            <p className="text-sm text-muted-foreground">
-              C&apos;est l&apos;état normal tant qu&apos;aucun module métier n&apos;alimente
-              encore cette liste — pas une anomalie.
-            </p>
-          </CardContent>
-        </Card>
+        <EmptyState
+          title="Aucune demande en attente"
+          description="C'est l'état normal tant qu'aucun module métier n'alimente encore cette liste — pas une anomalie."
+        />
       ) : (
         <Card>
           <CardContent className="p-0">

@@ -1,12 +1,17 @@
 "use server";
 
-import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
 
+/**
+ * Ne redirige pas elle-même (contrairement à une version précédente) : la
+ * redirection est laissée au client, après le succès, pour laisser une
+ * fenêtre où afficher un toast — un redirect() côté serveur ne rend jamais
+ * la main au composant client appelant. Même pattern que login-form.tsx.
+ */
 export async function changerMotDePassePremiereConnexion(
   motDePasse: string,
-): Promise<{ erreur: string } | void> {
+): Promise<{ erreur: string } | { succes: true }> {
   const supabase = await createClient();
   const {
     data: { user },
@@ -26,5 +31,5 @@ export async function changerMotDePassePremiereConnexion(
     data: { premiereConnexion: false },
   });
 
-  redirect("/dashboard");
+  return { succes: true };
 }

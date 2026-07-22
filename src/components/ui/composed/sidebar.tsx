@@ -27,8 +27,8 @@ export function Sidebar({ modules }: SidebarProps) {
   const pathname = usePathname();
 
   return (
-    <aside className="hidden w-64 shrink-0 border-r border-border bg-sidebar md:flex md:flex-col">
-      <div className="flex h-16 items-center border-b border-border px-4">
+    <aside className="hidden w-64 shrink-0 border-r border-sidebar-border bg-sidebar md:flex md:flex-col">
+      <div className="flex h-16 items-center border-b border-sidebar-border px-4">
         <span className="text-lg font-bold text-sidebar-foreground">ITA Digital</span>
       </div>
       <ScrollArea className="flex-1 px-2 py-4">
@@ -45,8 +45,8 @@ export function Sidebar({ modules }: SidebarProps) {
                   key={module.id}
                   href={href}
                   className={cn(
-                    "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-sidebar-foreground hover:bg-sidebar-accent",
-                    estActif && "bg-sidebar-accent",
+                    "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground",
+                    estActif && "bg-sidebar-accent text-sidebar-foreground",
                   )}
                 >
                   <Icone className="size-4" />
@@ -58,7 +58,7 @@ export function Sidebar({ modules }: SidebarProps) {
             return (
               <Accordion key={module.id} type="single" collapsible>
                 <AccordionItem value={module.id} className="border-none">
-                  <AccordionTrigger className="rounded-md px-3 py-2 text-sm font-medium text-sidebar-foreground hover:bg-sidebar-accent hover:no-underline">
+                  <AccordionTrigger className="rounded-md px-3 py-2 text-sm font-medium text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground hover:no-underline">
                     <span className="flex items-center gap-2">
                       <Icone className="size-4" />
                       {module.nom}
@@ -74,8 +74,8 @@ export function Sidebar({ modules }: SidebarProps) {
                             key={sousModule.id}
                             href={href}
                             className={cn(
-                              "rounded-md px-3 py-1.5 text-sm text-sidebar-foreground hover:bg-sidebar-accent",
-                              estActif && "bg-sidebar-accent",
+                              "rounded-md px-3 py-1.5 text-sm text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground",
+                              estActif && "bg-sidebar-accent text-sidebar-foreground",
                             )}
                           >
                             {sousModule.nom}

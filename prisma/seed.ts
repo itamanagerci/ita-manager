@@ -32,6 +32,7 @@ interface SousModuleSeed {
 interface ModuleSeed {
   code: string;
   nom: string;
+  icone: string; // nom d'export lucide-react, résolu par resoudreIcone() côté sidebar
   visibleMenu?: boolean;
   sousModules: SousModuleSeed[];
 }
@@ -45,12 +46,14 @@ const referentielModules: ModuleSeed[] = [
   {
     code: "authentification-roles",
     nom: "Authentification et Rôles",
+    icone: "ShieldCheck",
     visibleMenu: false,
     sousModules: [{ code: "gestion-comptes-acces", nom: "Gestion des comptes et accès" }],
   },
   {
     code: "direction-generale",
     nom: "Direction Générale",
+    icone: "Building2",
     sousModules: [
       { code: "validations-centralisees", nom: "Validations centralisées" },
       { code: "suivi", nom: "Suivi" },
@@ -60,6 +63,7 @@ const referentielModules: ModuleSeed[] = [
   {
     code: "rh",
     nom: "Ressources Humaines",
+    icone: "Users",
     sousModules: [
       { code: "creation-profil", nom: "Création de profil employé" },
       { code: "conge-permission", nom: "Demande de congé / permission" },
@@ -71,6 +75,7 @@ const referentielModules: ModuleSeed[] = [
   {
     code: "dfc",
     nom: "Finances et Comptabilité",
+    icone: "Wallet",
     sousModules: [
       { code: "paiement-standard", nom: "Paiement standard" },
       { code: "paiement-urgent-wave", nom: "Paiement urgent quotidien (Wave)" },
@@ -79,6 +84,7 @@ const referentielModules: ModuleSeed[] = [
   {
     code: "direction-technique",
     nom: "Direction Technique",
+    icone: "HardHat",
     sousModules: [
       { code: "appel-offres", nom: "Appel d'offres" },
       { code: "gestion-projet", nom: "Gestion de projet" },
@@ -90,11 +96,13 @@ const referentielModules: ModuleSeed[] = [
   {
     code: "achat",
     nom: "Service Achat",
+    icone: "ShoppingCart",
     sousModules: [{ code: "acces", nom: "Service Achat" }],
   },
   {
     code: "logistique",
     nom: "Service Logistique",
+    icone: "Truck",
     sousModules: [
       { code: "magasins", nom: "Magasins" },
       { code: "fiche-inventaire", nom: "Fiche Inventaire Article" },
@@ -115,6 +123,7 @@ const referentielModules: ModuleSeed[] = [
   {
     code: "qhse",
     nom: "Service QHSE",
+    icone: "ShieldAlert",
     sousModules: [
       { code: "accueil-securite", nom: "Accueil Sécurité" },
       { code: "ast", nom: "Analyse Sécuritaire des Tâches" },
@@ -130,6 +139,7 @@ const referentielModules: ModuleSeed[] = [
   {
     code: "carburant",
     nom: "Gestion Carburant",
+    icone: "Fuel",
     sousModules: [
       { code: "depots", nom: "Lieux de stockage carburant" },
       { code: "demande-carburant", nom: "Demande de carburant" },
@@ -138,6 +148,7 @@ const referentielModules: ModuleSeed[] = [
   {
     code: "assistant-direction",
     nom: "Assistant de Direction",
+    icone: "Archive",
     sousModules: [{ code: "archivage-documentaire", nom: "Archivage documentaire" }],
   },
 ];
@@ -146,10 +157,11 @@ async function seedReferentielModules() {
   for (const [ordreModule, moduleDef] of referentielModules.entries()) {
     const moduleCree = await prisma.module.upsert({
       where: { code: moduleDef.code },
-      update: { nom: moduleDef.nom, visibleMenu: moduleDef.visibleMenu ?? true },
+      update: { nom: moduleDef.nom, icone: moduleDef.icone, visibleMenu: moduleDef.visibleMenu ?? true },
       create: {
         code: moduleDef.code,
         nom: moduleDef.nom,
+        icone: moduleDef.icone,
         ordre: ordreModule,
         visibleMenu: moduleDef.visibleMenu ?? true,
       },
@@ -233,8 +245,8 @@ async function seedFonctions() {
     });
   }
 
-  // Fonction Direction Générale : accès aux 3 sous-modules du module DG
-  // uniquement — sert de compte de test pour le Lot 1, indépendamment de
+  // Fonction Direction Générale : accès aux 3 sous-modules du module DG +
+  // gestion-comptes-acces (administration des comptes) — indépendamment de
   // l'accès déjà large (connu, non corrigé) de "Responsable RH".
   const dgFonction = await prisma.fonction.upsert({
     where: { nom: "Direction Générale" },
@@ -242,7 +254,7 @@ async function seedFonctions() {
     create: { nom: "Direction Générale", description: "Pilotage et validations transverses" },
   });
   const sousModulesDg = await prisma.sousModule.findMany({
-    where: { code: { in: ["validations-centralisees", "suivi", "kpi"] } },
+    where: { code: { in: ["validations-centralisees", "suivi", "kpi", "gestion-comptes-acces"] } },
   });
   for (const sousModule of sousModulesDg) {
     await prisma.fonctionModuleDefaut.upsert({

@@ -6,6 +6,7 @@ import { tonaliteDepuisStatutLibelle } from "@/lib/demande-index-tonalite";
 import { prisma } from "@/lib/prisma";
 import { PageHeader } from "@/components/ui/composed/page-header";
 import { StatutBadge } from "@/components/ui/composed/statut-badge";
+import { EmptyState } from "@/components/ui/composed/empty-state";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export default async function SuiviPage() {
@@ -45,7 +46,7 @@ export default async function SuiviPage() {
               </CardHeader>
               <CardContent className="flex flex-col gap-2">
                 {statuts.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">Aucune donnée pour ce module</p>
+                  <EmptyState title="Aucune donnée pour ce module" bordered={false} className="py-4" />
                 ) : (
                   statuts.map((statut) => (
                     <div key={statut.statutLibelle} className="flex items-center justify-between">

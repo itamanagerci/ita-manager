@@ -1,5 +1,9 @@
 import { redirect } from "next/navigation";
-import { getCurrentUtilisateur, getModulesAccessibles } from "@/lib/server-actions/acces";
+import {
+  getCurrentUtilisateur,
+  getModulesAccessibles,
+  peutGererComptes,
+} from "@/lib/server-actions/acces";
 import { requireCompteActif } from "@/lib/server-actions/guards";
 import { Sidebar } from "@/components/ui/composed/sidebar";
 import { Topbar } from "@/components/ui/composed/topbar";
@@ -16,7 +20,10 @@ export default async function DashboardLayout({
 
   if (utilisateur.premiereConnexion) redirect("/premiere-connexion");
 
-  const modules = await getModulesAccessibles(utilisateur.id);
+  const [modules, gestionComptesAutorisee] = await Promise.all([
+    getModulesAccessibles(utilisateur.id),
+    peutGererComptes(utilisateur.id),
+  ]);
 
   return (
     <div className="flex min-h-screen flex-1">
@@ -28,6 +35,7 @@ export default async function DashboardLayout({
             prenom: utilisateur.prenom,
             fonction: utilisateur.fonction.nom,
           }}
+          peutGererComptes={gestionComptesAutorisee}
         />
         <main className="flex-1 p-6">{children}</main>
       </div>

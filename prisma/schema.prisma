@@ -93,6 +93,14 @@ model Utilisateur {
   dateCreation       DateTime           @default(now())
   dateModification   DateTime           @updatedAt
 
+  /// Nullable : les comptes du seed initial n'ont pas de créateur humain.
+  /// Pas de onDelete Cascade — supprimer un utilisateur qui a lui-même créé
+  /// d'autres comptes est bloqué par possedeDonneesLiees() (gestion-comptes.ts),
+  /// même logique que les autres FK non-cascadantes vers Utilisateur.
+  creeParId    String?
+  creePar      Utilisateur?  @relation("UtilisateurCreateur", fields: [creeParId], references: [id])
+  comptesCrees Utilisateur[] @relation("UtilisateurCreateur")
+
   acces             AccesUtilisateur[] @relation("AccesDuUtilisateur")
   accesModifies     AccesUtilisateur[] @relation("AccesModifiePar")
   actionsHistorique HistoriqueStatut[]

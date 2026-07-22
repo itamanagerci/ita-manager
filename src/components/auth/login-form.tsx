@@ -8,7 +8,7 @@ import { createClient } from "@/lib/supabase/client";
 import { loginSchema, type LoginInput } from "@/types/validations/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { FormField } from "@/components/ui/composed/form-field";
 
 export function LoginForm() {
   const router = useRouter();
@@ -45,26 +45,22 @@ export function LoginForm() {
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-      <div className="space-y-2">
-        <Label htmlFor="email">Email</Label>
+      <FormField label="Email" htmlFor="email" error={errors.email?.message}>
         <Input id="email" type="email" autoComplete="username" {...register("email")} />
-        {errors.email && (
-          <p className="text-sm text-status-danger">{errors.email.message}</p>
-        )}
-      </div>
+      </FormField>
 
-      <div className="space-y-2">
-        <Label htmlFor="motDePasse">Code d&apos;accès</Label>
+      <FormField
+        label="Code d'accès"
+        htmlFor="motDePasse"
+        error={errors.motDePasse?.message}
+      >
         <Input
           id="motDePasse"
           type="password"
           autoComplete="current-password"
           {...register("motDePasse")}
         />
-        {errors.motDePasse && (
-          <p className="text-sm text-status-danger">{errors.motDePasse.message}</p>
-        )}
-      </div>
+      </FormField>
 
       {erreurConnexion && (
         <p className="text-sm text-status-danger">{erreurConnexion}</p>

@@ -78,3 +78,24 @@ export async function getModulesAccessibles(
 
   return Array.from(modulesParId.values()).sort((a, b) => a.ordre - b.ordre);
 }
+
+/**
+ * Même vérification que requireAccesModule(), sans redirection — pour
+ * l'affichage conditionnel d'un lien (ex. dans UserMenu) plutôt que la
+ * garde d'une page entière.
+ */
+export async function peutGererComptes(utilisateurId: string): Promise<boolean> {
+  const acces = await prisma.accesUtilisateur.findFirst({
+    where: {
+      utilisateurId,
+      actif: true,
+      sousModule: {
+        code: "gestion-comptes-acces",
+        actif: true,
+        module: { code: "authentification-roles" },
+      },
+    },
+  });
+
+  return acces !== null;
+}

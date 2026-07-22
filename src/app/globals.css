@@ -87,13 +87,15 @@
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
   --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
+  /* Sidebar navy plein — dérivé de --brand-navy plutôt qu'un second hex
+     codé en dur, pour rester source-unique si la couleur de marque change. */
+  --sidebar: var(--brand-navy);
+  --sidebar-foreground: oklch(0.985 0 0);
   --sidebar-primary: var(--brand-navy);
   --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: var(--brand-navy);
-  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-accent: color-mix(in oklch, var(--brand-navy), white 15%);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.708 0 0);
 
   /* Tonalités de statut génériques (StatutBadge) — le vert de marque sert
@@ -104,6 +106,20 @@
   --status-attention: #d97706;
   --status-danger: #dc2626;
   --status-neutral: #6b7280;
+
+  /* Teintes toast par type — dérivées des tokens de marque (color-mix, pas
+     de nouveau hex) pour rester cohérentes si la marque change.
+     Volontairement absentes de .dark — pas de theme switcher actif dans
+     l'app, même précédent que --sidebar-*. */
+  --toast-success-bg: color-mix(in oklch, var(--brand-green), white 88%);
+  --toast-success-border: color-mix(in oklch, var(--brand-green), white 40%);
+  --toast-success-text: color-mix(in oklch, var(--brand-green), black 15%);
+  --toast-error-bg: color-mix(in oklch, var(--brand-magenta), white 88%);
+  --toast-error-border: color-mix(in oklch, var(--brand-magenta), white 40%);
+  --toast-error-text: color-mix(in oklch, var(--brand-magenta), black 10%);
+  --toast-info-bg: color-mix(in oklch, var(--brand-navy), white 88%);
+  --toast-info-border: color-mix(in oklch, var(--brand-navy), white 40%);
+  --toast-info-text: var(--brand-navy);
 }
 
 .dark {

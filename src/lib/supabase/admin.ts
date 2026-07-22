@@ -3,9 +3,12 @@ import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 
 /**
  * Client Supabase avec la clé service_role — accès administrateur complet
- * (création de comptes Auth, etc.). Strictement serveur, utilisé uniquement
- * par le script de seed dans ce lot. Ne JAMAIS importer dans un composant
- * client ni exposer cette clé au navigateur.
+ * (création/suppression de comptes Auth, etc.). Strictement serveur, utilisé
+ * par les Server Actions de gestion des comptes (lib/server-actions/
+ * gestion-comptes.ts) ainsi que par prisma/seed.ts (qui a sa propre copie
+ * inline de ce client, car tsx ne peut pas charger `server-only`). Ne
+ * JAMAIS importer dans un composant client ni exposer cette clé au
+ * navigateur.
  */
 export function createAdminClient() {
   return createSupabaseClient(
