@@ -80,7 +80,7 @@ export type CreerDemandeMissionInput = z.infer<typeof creerDemandeMissionSchema>
 
 export const creerReleveActiviteSchema = z.object({
   ouvrierId: z.string().min(1, "L'ouvrier est requis"),
-  projetLibelle: z.string().min(1, "Le projet est requis"),
+  projetId: z.string().min(1, "Le projet est requis"),
   periode: z.string().min(1, "La période est requise"),
   joursTravailles: z.number().int().positive("Nombre de jours invalide"),
 });

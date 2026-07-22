@@ -151,3 +151,13 @@ export async function possedeAccesSousModule(
 
   return acces !== null;
 }
+
+/**
+ * Accès réel au module direction-generale (n'importe quel Directeur avec
+ * cet accès peut valider — pas de ciblage d'une personne précise). Partagé
+ * entre carburant.ts (hors-quota) et appel-offres.ts (Lot 5) plutôt que
+ * dupliqué — carburant.ts's peutValiderDG() délègue ici.
+ */
+export async function peutValiderDirectionGenerale(utilisateurId: string): Promise<boolean> {
+  return possedeAccesSousModule(utilisateurId, "direction-generale", "validations-centralisees");
+}

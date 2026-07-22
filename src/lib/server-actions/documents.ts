@@ -6,19 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUtilisateur, possedeAccesModule } from "@/lib/server-actions/acces";
 import { requireAccesModule } from "@/lib/server-actions/guards";
-
-const BUCKET = "documents";
-const TAILLE_MAX_OCTETS = 20 * 1024 * 1024; // 20 Mo
-const MIME_TYPES_AUTORISES = [
-  "application/pdf",
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-  "application/msword",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  "application/vnd.ms-excel",
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-];
+import { BUCKET, TAILLE_MAX_OCTETS, MIME_TYPES_AUTORISES } from "@/lib/storage-constants";
 
 const TOUTES_CATEGORIES: CategorieDocument[] = [
   "CONTRATS",

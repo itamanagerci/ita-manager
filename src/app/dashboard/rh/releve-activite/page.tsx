@@ -37,7 +37,7 @@ export default async function ReleveActivitePage() {
 
   const estRH = await peutValiderRH(utilisateur.id);
 
-  const [aValider, tous, ouvriers] = await Promise.all([
+  const [aValider, tous, ouvriers, projets] = await Promise.all([
     listerAValiderReleves(),
     listerReleves(),
     prisma.utilisateur.findMany({
@@ -45,6 +45,7 @@ export default async function ReleveActivitePage() {
       select: { id: true, nom: true, prenom: true },
       orderBy: { nom: "asc" },
     }),
+    prisma.projet.findMany({ select: { id: true, nom: true }, orderBy: { nom: "asc" } }),
   ]);
 
   return (
@@ -52,7 +53,7 @@ export default async function ReleveActivitePage() {
       <PageHeader
         title="Relevé d'activité"
         description="Saisie des jours travaillés par les ouvriers, validée par les Ressources Humaines."
-        actions={<ReleveForm ouvriers={ouvriers} />}
+        actions={<ReleveForm ouvriers={ouvriers} projets={projets} />}
       />
 
       {estRH && aValider.length > 0 && (
@@ -78,7 +79,7 @@ export default async function ReleveActivitePage() {
                     <TableCell className="font-medium">
                       {releve.ouvrier.prenom} {releve.ouvrier.nom}
                     </TableCell>
-                    <TableCell>{releve.projetLibelle}</TableCell>
+                    <TableCell>{releve.projet.nom}</TableCell>
                     <TableCell>{releve.periode}</TableCell>
                     <TableCell>{releve.joursTravailles}</TableCell>
                     <TableCell>
@@ -98,7 +99,7 @@ export default async function ReleveActivitePage() {
       {tous.length === 0 ? (
         <EmptyState
           title="Aucun relevé pour le moment"
-          description="Alimenté automatiquement une fois le Lot Direction Technique construit — en attendant, la saisie manuelle ci-dessus reste disponible."
+          description="Un ouvrier doit d'abord être affecté à un projet (Direction Technique) avant qu'un relevé puisse être saisi pour lui."
         />
       ) : (
         <Card>
@@ -119,7 +120,7 @@ export default async function ReleveActivitePage() {
                     <TableCell className="font-medium">
                       {releve.ouvrier.prenom} {releve.ouvrier.nom}
                     </TableCell>
-                    <TableCell>{releve.projetLibelle}</TableCell>
+                    <TableCell>{releve.projet.nom}</TableCell>
                     <TableCell>{releve.periode}</TableCell>
                     <TableCell>{releve.joursTravailles}</TableCell>
                     <TableCell>

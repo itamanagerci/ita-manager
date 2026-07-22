@@ -1,14 +1,16 @@
 import { Search } from "lucide-react";
-import { NotificationBell } from "@/components/ui/composed/notification-bell";
+import { NotificationBell, type NotificationItem } from "@/components/ui/composed/notification-bell";
 import { UserMenu } from "@/components/ui/composed/user-menu";
 import { Input } from "@/components/ui/input";
+import { marquerNotificationLue } from "@/lib/server-actions/gestion-projet";
 
 interface TopbarProps {
   utilisateur: { nom: string; prenom: string; fonction: string };
   peutGererComptes: boolean;
+  notifications: NotificationItem[];
 }
 
-export function Topbar({ utilisateur, peutGererComptes }: TopbarProps) {
+export function Topbar({ utilisateur, peutGererComptes, notifications }: TopbarProps) {
   return (
     <header className="flex h-16 items-center justify-between border-b border-border px-6">
       <div className="relative w-full max-w-sm">
@@ -18,7 +20,7 @@ export function Topbar({ utilisateur, peutGererComptes }: TopbarProps) {
         <Input disabled placeholder="Rechercher..." className="pl-9" />
       </div>
       <div className="flex items-center gap-2">
-        <NotificationBell notifications={[]} />
+        <NotificationBell notifications={notifications} onMarquerCommeLue={marquerNotificationLue} />
         <UserMenu
           nom={utilisateur.nom}
           prenom={utilisateur.prenom}

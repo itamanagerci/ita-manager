@@ -4,11 +4,11 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { creerReleveActivite } from "@/lib/server-actions/rh-releves";
+import { creerDemandeMateriel } from "@/lib/server-actions/demande-materiel";
 import {
-  creerReleveActiviteSchema,
-  type CreerReleveActiviteInput,
-} from "@/types/validations/rh";
+  creerDemandeMaterielSchema,
+  type CreerDemandeMaterielInput,
+} from "@/types/validations/direction-technique";
 import { useNotifier } from "@/hooks/use-notifier";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,12 +23,12 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 
-interface ReleveFormProps {
-  ouvriers: { id: string; nom: string; prenom: string }[];
+interface DemandeMaterielFormProps {
   projets: { id: string; nom: string }[];
+  materiels: { id: string; designation: string }[];
 }
 
-export function ReleveForm({ ouvriers, projets }: ReleveFormProps) {
+export function DemandeMaterielForm({ projets, materiels }: DemandeMaterielFormProps) {
   const router = useRouter();
   const notifier = useNotifier();
   const [dialogOuvert, setDialogOuvert] = useState(false);
@@ -40,16 +40,16 @@ export function ReleveForm({ ouvriers, projets }: ReleveFormProps) {
     handleSubmit,
     reset,
     formState: { errors },
-  } = useForm<CreerReleveActiviteInput>({
-    resolver: zodResolver(creerReleveActiviteSchema),
-    defaultValues: { ouvrierId: ouvriers[0]?.id ?? "", projetId: projets[0]?.id ?? "" },
+  } = useForm<CreerDemandeMaterielInput>({
+    resolver: zodResolver(creerDemandeMaterielSchema),
+    defaultValues: { projetId: projets[0]?.id ?? "", materielId: materiels[0]?.id ?? "" },
   });
 
-  async function onSubmit(values: CreerReleveActiviteInput) {
+  async function onSubmit(values: CreerDemandeMaterielInput) {
     setErreur(null);
     setEnCours(true);
 
-    const resultat = await creerReleveActivite(values);
+    const resultat = await creerDemandeMateriel(values);
 
     setEnCours(false);
     if ("erreur" in resultat) {
@@ -59,33 +59,24 @@ export function ReleveForm({ ouvriers, projets }: ReleveFormProps) {
 
     setDialogOuvert(false);
     reset();
-    notifier.succes("Relevé enregistré", "Le relevé a été transmis pour validation RH.");
+    notifier.succes("Demande envoyée");
     router.refresh();
   }
 
   return (
     <Dialog open={dialogOuvert} onOpenChange={setDialogOuvert}>
       <DialogTrigger asChild>
-        <Button>Nouveau relevé</Button>
+        <Button>Nouvelle demande</Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Saisir un relevé d&apos;activité</DialogTitle>
+          <DialogTitle>Nouvelle demande de matériel</DialogTitle>
         </DialogHeader>
 
         <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
-          <FormField label="Ouvrier" htmlFor="ouvrierId">
-            <NativeSelect id="ouvrierId" {...register("ouvrierId")}>
-              {ouvriers.map((o) => (
-                <option key={o.id} value={o.id}>
-                  {o.prenom} {o.nom}
-                </option>
-              ))}
-            </NativeSelect>
-          </FormField>
-
-          <FormField label="Projet" htmlFor="projetId">
+          <FormField label="Projet (optionnel)" htmlFor="projetId">
             <NativeSelect id="projetId" {...register("projetId")}>
+              <option value="">Aucun</option>
               {projets.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.nom}
@@ -94,28 +85,33 @@ export function ReleveForm({ ouvriers, projets }: ReleveFormProps) {
             </NativeSelect>
           </FormField>
 
-          <FormField label="Période" htmlFor="periode" error={errors.periode?.message}>
-            <Input id="periode" placeholder="Ex. Semaine du 01/07 au 07/07" {...register("periode")} />
+          <FormField
+            label="Chantier (texte libre, si pas de projet)"
+            htmlFor="chantierLibre"
+            error={errors.chantierLibre?.message}
+          >
+            <Input id="chantierLibre" {...register("chantierLibre")} />
           </FormField>
 
-          <FormField
-            label="Jours travaillés"
-            htmlFor="joursTravailles"
-            error={errors.joursTravailles?.message}
-          >
-            <Input
-              id="joursTravailles"
-              type="number"
-              min={1}
-              {...register("joursTravailles", { valueAsNumber: true })}
-            />
+          <FormField label="Matériel" htmlFor="materielId">
+            <NativeSelect id="materielId" {...register("materielId")}>
+              {materiels.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.designation}
+                </option>
+              ))}
+            </NativeSelect>
+          </FormField>
+
+          <FormField label="Délai souhaité" htmlFor="delaiSouhaite" error={errors.delaiSouhaite?.message}>
+            <Input id="delaiSouhaite" type="date" {...register("delaiSouhaite")} />
           </FormField>
 
           {erreur && <p className="text-sm text-status-danger">{erreur}</p>}
 
           <DialogFooter>
             <Button type="submit" disabled={enCours}>
-              {enCours ? "Envoi..." : "Enregistrer"}
+              {enCours ? "Envoi..." : "Envoyer la demande"}
             </Button>
           </DialogFooter>
         </form>

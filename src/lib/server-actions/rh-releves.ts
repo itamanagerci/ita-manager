@@ -39,10 +39,17 @@ export async function creerReleveActivite(
     };
   }
 
+  const affectation = await prisma.affectationProjet.findFirst({
+    where: { ouvrierId: donnees.ouvrierId, projetId: donnees.projetId },
+  });
+  if (!affectation) {
+    return { erreur: "Cet ouvrier n'est pas affecté à ce projet." };
+  }
+
   const releve = await prisma.releveActivite.create({
     data: {
       ouvrierId: donnees.ouvrierId,
-      projetLibelle: donnees.projetLibelle,
+      projetId: donnees.projetId,
       periode: donnees.periode,
       joursTravailles: donnees.joursTravailles,
       saisiParId: utilisateur.id,
@@ -121,6 +128,7 @@ export async function listerReleves() {
     include: {
       ouvrier: { select: { nom: true, prenom: true } },
       saisiPar: { select: { nom: true, prenom: true } },
+      projet: { select: { nom: true } },
     },
     orderBy: { dateCreation: "desc" },
   });
@@ -136,6 +144,7 @@ export async function listerAValiderReleves() {
     include: {
       ouvrier: { select: { nom: true, prenom: true } },
       saisiPar: { select: { nom: true, prenom: true } },
+      projet: { select: { nom: true } },
     },
     orderBy: { dateCreation: "asc" },
   });

@@ -303,7 +303,55 @@ async function seedFonctions() {
     });
   }
 
-  return { rhFonction, chefChantierFonction, dgFonction, logistiqueFonction };
+  // Fonction Directeur Technique (Lot 5) : accès aux 5 sous-modules du
+  // module direction-technique — persona dédiée plutôt que de s'appuyer
+  // sur l'accès déjà large et non-corrigé de "Responsable RH", même
+  // précédent que "Responsable Logistique/Carburant" (Lot 3).
+  const directionTechniqueFonction = await prisma.fonction.upsert({
+    where: { nom: "Directeur Technique" },
+    update: {},
+    create: {
+      nom: "Directeur Technique",
+      description: "Pilotage des appels d'offres, projets et ressources techniques",
+    },
+  });
+  const sousModulesDirectionTechnique = await prisma.sousModule.findMany({
+    where: {
+      code: {
+        in: [
+          "appel-offres",
+          "gestion-projet",
+          "demande-rh-projet",
+          "demande-logistique",
+          "liste-articles",
+        ],
+      },
+    },
+  });
+  for (const sousModule of sousModulesDirectionTechnique) {
+    await prisma.fonctionModuleDefaut.upsert({
+      where: {
+        fonctionId_sousModuleId: {
+          fonctionId: directionTechniqueFonction.id,
+          sousModuleId: sousModule.id,
+        },
+      },
+      update: {},
+      create: {
+        fonctionId: directionTechniqueFonction.id,
+        sousModuleId: sousModule.id,
+        activeParDefaut: true,
+      },
+    });
+  }
+
+  return {
+    rhFonction,
+    chefChantierFonction,
+    dgFonction,
+    logistiqueFonction,
+    directionTechniqueFonction,
+  };
 }
 
 async function seedUtilisateursTest(fonctions: {
@@ -311,6 +359,7 @@ async function seedUtilisateursTest(fonctions: {
   chefChantierFonction: { id: string };
   dgFonction: { id: string };
   logistiqueFonction: { id: string };
+  directionTechniqueFonction: { id: string };
 }) {
   const admin = createAdminClient();
 
@@ -344,6 +393,13 @@ async function seedUtilisateursTest(fonctions: {
       prenom: "Cheikh",
       niveauHierarchique: "CHEF_SERVICE" as const,
       fonctionId: fonctions.logistiqueFonction.id,
+    },
+    {
+      email: "direction-technique.test@itamanager.cloud",
+      nom: "Fall",
+      prenom: "Ibrahima",
+      niveauHierarchique: "CHEF_SERVICE" as const,
+      fonctionId: fonctions.directionTechniqueFonction.id,
     },
   ];
 
@@ -422,11 +478,30 @@ async function seedCarburantTest() {
   });
 }
 
+/// Référentiel de test Lot 5 — Materiel (Logistique, Lot 6) et Article
+/// (Achat, Lot 7) durables, pas des artefacts jetables.
+async function seedDirectionTechniqueTest() {
+  const materielExistant = await prisma.materiel.findFirst({
+    where: { designation: "Bétonnière 350L" },
+  });
+  if (!materielExistant) {
+    await prisma.materiel.create({ data: { designation: "Bétonnière 350L", disponible: true } });
+  }
+
+  const articleExistant = await prisma.article.findFirst({
+    where: { designation: "Ciment CEM II 42.5 (sac 50kg)" },
+  });
+  if (!articleExistant) {
+    await prisma.article.create({ data: { designation: "Ciment CEM II 42.5 (sac 50kg)" } });
+  }
+}
+
 async function main() {
   await seedReferentielModules();
   const fonctions = await seedFonctions();
   await seedUtilisateursTest(fonctions);
   await seedCarburantTest();
+  await seedDirectionTechniqueTest();
 }
 
 main()

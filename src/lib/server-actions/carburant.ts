@@ -3,7 +3,11 @@
 import { redirect } from "next/navigation";
 import type { StatutDemandeCarburant } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUtilisateur, possedeAccesSousModule } from "@/lib/server-actions/acces";
+import {
+  getCurrentUtilisateur,
+  peutValiderDirectionGenerale,
+  possedeAccesSousModule,
+} from "@/lib/server-actions/acces";
 import { requireAccesModule } from "@/lib/server-actions/guards";
 import { enregistrerTransition } from "@/lib/server-actions/historique";
 import { upsertDemandeIndex } from "@/lib/server-actions/demande-index";
@@ -23,8 +27,9 @@ export async function peutValiderLogistique(utilisateurId: string): Promise<bool
   return possedeAccesSousModule(utilisateurId, "carburant", "depots");
 }
 
+/** Délègue à acces.ts — même vérification que Lot 5's appel-offres.ts, pas dupliquée. */
 export async function peutValiderDG(utilisateurId: string): Promise<boolean> {
-  return possedeAccesSousModule(utilisateurId, "direction-generale", "validations-centralisees");
+  return peutValiderDirectionGenerale(utilisateurId);
 }
 
 async function requireAccesDemandeCarburant() {

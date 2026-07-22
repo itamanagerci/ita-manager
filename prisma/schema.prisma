@@ -130,6 +130,19 @@ model Utilisateur {
 
   relevesActivite ReleveActivite[] @relation("UtilisateurReleveOuvrier")
   relevesSaisis   ReleveActivite[] @relation("UtilisateurReleveSaisiPar")
+
+  appelsOffresInities DemandeAppelOffres[]
+
+  projetsDiriges      Projet[]           @relation("ProjetChefDeProjet")
+  pointsValidationCoches PointValidation[]
+  notifications       Notification[]
+
+  demandesRHProjetInitiees DemandeRHProjet[]
+  lignesContreProposeesPour LigneDemandeRHProjet[] @relation("LigneOuvrierContrePropose")
+  affectationsProjet      AffectationProjet[]      @relation("UtilisateurAffectationOuvrier")
+
+  demandesMaterielInitiees DemandeMateriel[]
+  articlesCrees            Article[]
 }
 
 /// Droits d'accès individuels. Initialisés depuis FonctionModuleDefaut à la création
@@ -430,11 +443,16 @@ enum StatutReleveActivite {
 /// Structure et circuit réels dès ce lot, mais volontairement sans
 /// référentiel Projet (projetLibelle reste du texte libre) en attendant le
 /// Lot 5 (Direction Technique) — cf. CLAUDE.md.
+/// projetId (Lot 5) remplace projetLibelle (texte libre du Lot 4, en
+/// attendant que Projet existe réellement) — remplacement net, aucune
+/// ligne réelle n'existait à migrer. creerReleveActivite() exige
+/// désormais une AffectationProjet active pour (ouvrierId, projetId).
 model ReleveActivite {
   id              String               @id @default(cuid())
   ouvrierId       String
   ouvrier         Utilisateur          @relation("UtilisateurReleveOuvrier", fields: [ouvrierId], references: [id])
-  projetLibelle   String
+  projetId        String
+  projet          Projet               @relation(fields: [projetId], references: [id])
   periode         String
   joursTravailles Int
   statut          StatutReleveActivite @default(SOUMIS)
@@ -447,4 +465,250 @@ model ReleveActivite {
 
   @@index([ouvrierId])
   @@index([statut])
+  @@index([projetId])
+}
+
+enum StatutAppelOffres {
+  EN_ATTENTE_DG
+  VALIDE
+  REFUSE
+}
+
+model DemandeAppelOffres {
+  id            String            @id @default(cuid())
+  nom           String
+  client        String
+  montantEstime Decimal           @db.Decimal(14, 2)
+  description   String
+  delaiReponse  DateTime
+
+  initiateurId String
+  initiateur   Utilisateur @relation(fields: [initiateurId], references: [id])
+
+  statut     StatutAppelOffres @default(EN_ATTENTE_DG)
+  motifRefus String?
+
+  dateCreation     DateTime @default(now())
+  dateModification DateTime @updatedAt
+
+  piecesJointes PieceJointeAppelOffres[]
+
+  @@index([statut])
+  @@index([initiateurId])
+}
+
+/// Réutilise le bucket Storage privé "documents" du Lot 2 (préfixe
+/// "appel-offres/"), pas une nouvelle infrastructure — cf. CLAUDE.md.
+model PieceJointeAppelOffres {
+  id                 String             @id @default(cuid())
+  demandeId          String
+  demande            DemandeAppelOffres @relation(fields: [demandeId], references: [id], onDelete: Cascade)
+  cheminFichier      String
+  nomFichierOriginal String
+}
+
+/// Création directe, pas de circuit de validation. La validation d'un
+/// appel d'offres (DemandeAppelOffres) ne crée jamais automatiquement de
+/// Projet — les deux sous-modules restent indépendants, cf. CLAUDE.md.
+model Projet {
+  id           String    @id @default(cuid())
+  nom          String
+  dateDebut    DateTime
+  dateFin      DateTime?
+  description  String
+
+  chefProjetId String
+  chefProjet   Utilisateur @relation("ProjetChefDeProjet", fields: [chefProjetId], references: [id])
+
+  dateCreation     DateTime @default(now())
+  dateModification DateTime @updatedAt
+
+  pointsValidation PointValidation[]
+  affectations     AffectationProjet[]
+  demandesRH       DemandeRHProjet[]
+  demandesMateriel DemandeMateriel[]
+  relevesActivite  ReleveActivite[]
+
+  @@index([chefProjetId])
+}
+
+enum StatutPointValidation {
+  A_FAIRE
+  FAIT
+}
+
+model PointValidation {
+  id       String @id @default(cuid())
+  projetId String
+  projet   Projet @relation(fields: [projetId], references: [id], onDelete: Cascade)
+
+  libelle  String
+  echeance DateTime
+  statut   StatutPointValidation @default(A_FAIRE)
+
+  cochePar       String?
+  cocheur        Utilisateur? @relation(fields: [cochePar], references: [id])
+  dateValidation DateTime?
+
+  @@index([projetId])
+  @@index([statut, echeance])
+}
+
+/// Première table de notifications réelle de ce projet — NotificationBell
+/// (Lot 0) existait déjà mais n'avait jamais de données (notifications={[]}
+/// codé en dur). Alimentée par une vérification "pull" à la navigation
+/// (verifierEtCreerAlertesEcheance(), dashboard/layout.tsx), pas par une
+/// tâche planifiée — aucune infrastructure cron n'existe dans ce projet.
+/// Cf. CLAUDE.md.
+model Notification {
+  id             String  @id @default(cuid())
+  destinataireId String
+  destinataire   Utilisateur @relation(fields: [destinataireId], references: [id], onDelete: Cascade)
+
+  titre       String
+  description String?
+  lu          Boolean @default(false)
+  lienDetail  String?
+
+  entiteType String
+  entiteId   String
+
+  dateCreation DateTime @default(now())
+
+  @@unique([destinataireId, entiteType, entiteId])
+  @@index([destinataireId, lu])
+}
+
+enum StatutLigneDemandeRH {
+  EN_ATTENTE_RH
+  CONTRE_PROPOSEE
+  VALIDEE
+  REFUSEE
+}
+
+model DemandeRHProjet {
+  id       String @id @default(cuid())
+  projetId String
+  projet   Projet @relation(fields: [projetId], references: [id])
+
+  initiateurId String
+  initiateur   Utilisateur @relation(fields: [initiateurId], references: [id])
+
+  dateCreation DateTime @default(now())
+
+  lignes LigneDemandeRHProjet[]
+
+  @@index([projetId])
+}
+
+/// Circuit par ligne, pas par demande entière — chaque ligne progresse
+/// indépendamment (une demande à 3 lignes peut avoir 3 statuts différents
+/// simultanément), donc le suivi DemandeIndex/HistoriqueStatut se fait au
+/// grain de la ligne (entiteType "LigneDemandeRHProjet"), pas de la
+/// demande parente. Cf. CLAUDE.md.
+model LigneDemandeRHProjet {
+  id        String @id @default(cuid())
+  demandeId String
+  demande   DemandeRHProjet @relation(fields: [demandeId], references: [id], onDelete: Cascade)
+
+  competence            String
+  periode               String
+  tauxJournalierPropose Decimal @db.Decimal(14, 2)
+
+  statut     StatutLigneDemandeRH @default(EN_ATTENTE_RH)
+  motifRefus String?
+
+  /// Contre-proposition RH (ouvrier + termes alternatifs), en attente de
+  /// la décision du DT initiateur de la demande.
+  ouvrierContreProposeId      String?
+  ouvrierContrePropose        Utilisateur? @relation("LigneOuvrierContrePropose", fields: [ouvrierContreProposeId], references: [id])
+  competenceContreProposee    String?
+  tauxJournalierContrePropose Decimal? @db.Decimal(14, 2)
+
+  affectation AffectationProjet?
+
+  dateModification DateTime @updatedAt
+
+  @@index([demandeId])
+  @@index([statut])
+}
+
+/// Créée à la validation finale d'une ligne (directe ou contre-proposition
+/// acceptée) — c'est ce que "ajouté au relevé d'activité des ouvriers"
+/// signifie concrètement : creerReleveActivite() (Lot 4) exige désormais
+/// une affectation active pour le couple (ouvrierId, projetId). Volontairement
+/// permanente pour ce lot (pas de statut/dateFin) — cf. CLAUDE.md.
+model AffectationProjet {
+  id             String  @id @default(cuid())
+  projetId       String
+  projet         Projet  @relation(fields: [projetId], references: [id])
+  ouvrierId      String
+  ouvrier        Utilisateur @relation("UtilisateurAffectationOuvrier", fields: [ouvrierId], references: [id])
+  competence     String
+  tauxJournalier Decimal @db.Decimal(14, 2)
+
+  /// Une affectation naît toujours d'exactement une ligne validée.
+  ligneDemandeId String               @unique
+  ligneDemande   LigneDemandeRHProjet @relation(fields: [ligneDemandeId], references: [id])
+
+  dateCreation DateTime @default(now())
+
+  @@index([ouvrierId, projetId])
+}
+
+/// Référentiel minimal, même esprit que Vehicule (Lot 3) — à étendre par
+/// le futur Lot 6 (Logistique), pas remplacer. Cf. CLAUDE.md.
+model Materiel {
+  id          String  @id @default(cuid())
+  designation String
+  disponible  Boolean @default(true)
+
+  demandesMateriel DemandeMateriel[]
+}
+
+enum StatutDemandeMateriel {
+  EN_ATTENTE_LOGISTIQUE
+  VALIDEE
+  REFUSEE
+}
+
+/// Circuit complet qui refuse tant qu'aucune Fonction n'a d'accès
+/// Logistique (aucune aujourd'hui) — même politique que les autres cas
+/// "refuser si aucun responsable résolu". Cf. CLAUDE.md.
+model DemandeMateriel {
+  id            String   @id @default(cuid())
+  projetId      String?
+  projet        Projet?  @relation(fields: [projetId], references: [id])
+  chantierLibre String?
+  materielId    String
+  materiel      Materiel @relation(fields: [materielId], references: [id])
+  delaiSouhaite DateTime
+
+  initiateurId String
+  initiateur   Utilisateur @relation(fields: [initiateurId], references: [id])
+
+  statut     StatutDemandeMateriel @default(EN_ATTENTE_LOGISTIQUE)
+  motifRefus String?
+
+  dateCreation     DateTime @default(now())
+  dateModification DateTime @updatedAt
+
+  @@index([projetId])
+  @@index([statut])
+}
+
+/// Référentiel minimal partagé avec le futur Lot 7 (Achat) — désignation
+/// créable par n'importe qui avec accès à liste-articles ; fournisseur/prix
+/// restent null et non éditables tant qu'Achat n'existe pas, sur la même
+/// table (pas recréée). Distinct de Materiel (4.4) — cf. CLAUDE.md.
+model Article {
+  id           String   @id @default(cuid())
+  designation  String
+  fournisseur  String?
+  prix         Decimal? @db.Decimal(14, 2)
+
+  creeParId String?
+  creePar   Utilisateur? @relation(fields: [creeParId], references: [id])
+
+  dateCreation DateTime @default(now())
 }

@@ -5,6 +5,10 @@ import {
   peutGererComptes,
 } from "@/lib/server-actions/acces";
 import { requireCompteActif } from "@/lib/server-actions/guards";
+import {
+  listerNotifications,
+  verifierEtCreerAlertesEcheance,
+} from "@/lib/server-actions/gestion-projet";
 import { Sidebar } from "@/components/ui/composed/sidebar";
 import { Topbar } from "@/components/ui/composed/topbar";
 
@@ -20,10 +24,25 @@ export default async function DashboardLayout({
 
   if (utilisateur.premiereConnexion) redirect("/premiere-connexion");
 
-  const [modules, gestionComptesAutorisee] = await Promise.all([
+  // Vérification "pull" à chaque navigation (pas de tâche planifiée dans ce
+  // projet) — doit se terminer avant listerNotifications() pour que les
+  // alertes fraîchement créées apparaissent dès cette même requête.
+  await verifierEtCreerAlertesEcheance(utilisateur.id);
+
+  const [modules, gestionComptesAutorisee, notificationsBrutes] = await Promise.all([
     getModulesAccessibles(utilisateur.id),
     peutGererComptes(utilisateur.id),
+    listerNotifications(),
   ]);
+
+  const notifications = notificationsBrutes.map((n) => ({
+    id: n.id,
+    titre: n.titre,
+    description: n.description ?? undefined,
+    lu: n.lu,
+    date: n.dateCreation,
+    href: n.lienDetail ?? undefined,
+  }));
 
   return (
     <div className="flex min-h-screen flex-1">
@@ -36,6 +55,7 @@ export default async function DashboardLayout({
             fonction: utilisateur.fonction.nom,
           }}
           peutGererComptes={gestionComptesAutorisee}
+          notifications={notifications}
         />
         <main className="flex-1 p-6">{children}</main>
       </div>
