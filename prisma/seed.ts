@@ -224,6 +224,9 @@ async function seedFonctions() {
     "accueil-securite",
     "ast",
     "rapport-hebdo",
+    // Lot 3 — ajout délibéré : persona demandeur carburant réaliste et
+    // propre (distinct de l'accès déjà large et non-corrigé de RH).
+    "demande-carburant",
   ];
   const sousModulesChefChantier = await prisma.sousModule.findMany({
     where: { code: { in: codesChefChantier } },
@@ -266,13 +269,48 @@ async function seedFonctions() {
     });
   }
 
-  return { rhFonction, chefChantierFonction, dgFonction };
+  // Fonction Responsable Logistique/Carburant (Lot 3) : accès UNIQUEMENT à
+  // "depots" (pas "demande-carburant") — un même responsable ne doit pas
+  // pouvoir soumettre puis auto-valider sa propre demande. Scoping au
+  // module "carburant" ; sans rapport avec le module "logistique" (Service
+  // Logistique) déjà seedé séparément.
+  const logistiqueFonction = await prisma.fonction.upsert({
+    where: { nom: "Responsable Logistique/Carburant" },
+    update: {},
+    create: {
+      nom: "Responsable Logistique/Carburant",
+      description:
+        "Gestion des dépôts et validation des demandes du module Carburant (distinct du module Service Logistique)",
+    },
+  });
+  const sousModulesLogistique = await prisma.sousModule.findMany({
+    where: { code: "depots" },
+  });
+  for (const sousModule of sousModulesLogistique) {
+    await prisma.fonctionModuleDefaut.upsert({
+      where: {
+        fonctionId_sousModuleId: {
+          fonctionId: logistiqueFonction.id,
+          sousModuleId: sousModule.id,
+        },
+      },
+      update: {},
+      create: {
+        fonctionId: logistiqueFonction.id,
+        sousModuleId: sousModule.id,
+        activeParDefaut: true,
+      },
+    });
+  }
+
+  return { rhFonction, chefChantierFonction, dgFonction, logistiqueFonction };
 }
 
 async function seedUtilisateursTest(fonctions: {
   rhFonction: { id: string };
   chefChantierFonction: { id: string };
   dgFonction: { id: string };
+  logistiqueFonction: { id: string };
 }) {
   const admin = createAdminClient();
 
@@ -299,6 +337,13 @@ async function seedUtilisateursTest(fonctions: {
       // enAttenteValidationDe côté Validations centralisées.
       niveauHierarchique: "DIRECTEUR" as const,
       fonctionId: fonctions.dgFonction.id,
+    },
+    {
+      email: "logistique.test@itamanager.cloud",
+      nom: "Ba",
+      prenom: "Cheikh",
+      niveauHierarchique: "CHEF_SERVICE" as const,
+      fonctionId: fonctions.logistiqueFonction.id,
     },
   ];
 
@@ -347,10 +392,41 @@ async function seedUtilisateursTest(fonctions: {
   }
 }
 
+/// Référentiel de test Lot 3 — dépôt et véhicules durables, pas des
+/// artefacts jetables de vérification (comme le sont les demandes/
+/// réapprovisionnements créés pendant les tests manuels).
+async function seedCarburantTest() {
+  const depotExistant = await prisma.depot.findFirst({
+    where: { nom: "Dépôt Principal Dakar" },
+  });
+  if (!depotExistant) {
+    await prisma.depot.create({
+      data: {
+        nom: "Dépôt Principal Dakar",
+        localisation: "Zone industrielle, Dakar",
+        chantiersRattaches: ["Chantier A", "Chantier B"],
+        quantiteStockLitres: 5000,
+      },
+    });
+  }
+
+  await prisma.vehicule.upsert({
+    where: { immatriculation: "DK-1234-AA" },
+    update: {},
+    create: { immatriculation: "DK-1234-AA", type: "LEGER", quotaMensuelLitres: 300 },
+  });
+  await prisma.vehicule.upsert({
+    where: { immatriculation: "DK-5678-BB" },
+    update: {},
+    create: { immatriculation: "DK-5678-BB", type: "LOURD", quotaMensuelLitres: 800 },
+  });
+}
+
 async function main() {
   await seedReferentielModules();
   const fonctions = await seedFonctions();
   await seedUtilisateursTest(fonctions);
+  await seedCarburantTest();
 }
 
 main()

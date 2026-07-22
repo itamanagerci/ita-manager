@@ -125,3 +125,29 @@ export async function possedeAccesModule(
 
   return acces !== null;
 }
+
+/**
+ * Même vérification que peutGererComptes(), généralisée à n'importe quel
+ * sous-module précis — utilisée quand un sous-module sert de signal de
+ * permission de facto (ex. accès à carburant/depots = responsable
+ * Logistique/Carburant, cf. lib/server-actions/carburant.ts).
+ */
+export async function possedeAccesSousModule(
+  utilisateurId: string,
+  moduleCode: string,
+  sousModuleCode: string,
+): Promise<boolean> {
+  const acces = await prisma.accesUtilisateur.findFirst({
+    where: {
+      utilisateurId,
+      actif: true,
+      sousModule: {
+        code: sousModuleCode,
+        actif: true,
+        module: { code: moduleCode },
+      },
+    },
+  });
+
+  return acces !== null;
+}

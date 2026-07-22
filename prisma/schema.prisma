@@ -109,6 +109,9 @@ model Utilisateur {
   demandesIndexAValider DemandeIndex[] @relation("DemandeIndexValidateur")
 
   documentsAjoutes Document[] @relation("UtilisateurAjouteDocument")
+
+  demandesCarburantSoumises     DemandeCarburant[]     @relation("UtilisateurDemandeCarburant")
+  reapprovisionnementsEffectues Reapprovisionnement[]  @relation("UtilisateurReapprovisionnement")
 }
 
 /// Droits d'accès individuels. Initialisés depuis FonctionModuleDefaut à la création
@@ -219,4 +222,80 @@ model Document {
   ajoutePar   Utilisateur? @relation("UtilisateurAjouteDocument", fields: [ajouteParId], references: [id])
 
   @@index([categorie])
+}
+
+enum StatutDemandeCarburant {
+  EN_ATTENTE_LOGISTIQUE
+  EN_ATTENTE_DG
+  VALIDEE
+  REFUSEE
+}
+
+enum TypeVehicule {
+  LEGER
+  LOURD
+}
+
+/// Lot 3 — Gestion Carburant. Référentiel véhicule volontairement minimal :
+/// le futur Lot 6 (Logistique) l'étendra (affectation, historique, statuts...)
+/// plutôt que de le remplacer — cf. CLAUDE.md.
+model Vehicule {
+  id                 String             @id @default(cuid())
+  immatriculation    String             @unique
+  type               TypeVehicule
+  quotaMensuelLitres Int
+  demandesCarburant  DemandeCarburant[]
+}
+
+model Depot {
+  id                   String                 @id @default(cuid())
+  nom                  String
+  localisation         String
+  chantiersRattaches   String[]
+  /// Mis à jour par les mouvements (réapprovisionnement, validation finale
+  /// d'une demande) — jamais recalculé à la volée à la lecture.
+  quantiteStockLitres  Int                    @default(0)
+  demandesCarburant    DemandeCarburant[]
+  reapprovisionnements Reapprovisionnement[]
+}
+
+/// Pas de circuit de validation — saisie directe par le Responsable
+/// Logistique/Carburant, incrémente Depot.quantiteStockLitres à la création.
+model Reapprovisionnement {
+  id             String       @id @default(cuid())
+  depotId        String
+  depot          Depot        @relation(fields: [depotId], references: [id])
+  quantiteLitres Int
+  date           DateTime     @default(now())
+  fournisseur    String
+
+  /// Même pattern non-cascadant que Utilisateur.creeParId/Document.ajouteParId.
+  effectueParId String?
+  effectuePar   Utilisateur? @relation("UtilisateurReapprovisionnement", fields: [effectueParId], references: [id])
+}
+
+model DemandeCarburant {
+  id                     String                 @id @default(cuid())
+  vehiculeId             String
+  vehicule               Vehicule               @relation(fields: [vehiculeId], references: [id])
+  depotSourceId          String
+  depotSource            Depot                  @relation(fields: [depotSourceId], references: [id])
+  kilometrageCompteur    Int
+  quantiteDemandeeLitres Int
+  chantierMission        String
+  demandeurId            String
+  demandeur              Utilisateur            @relation("UtilisateurDemandeCarburant", fields: [demandeurId], references: [id])
+  statut                 StatutDemandeCarburant @default(EN_ATTENTE_LOGISTIQUE)
+  motifRefus             String?
+
+  /// Cumul mensuel du véhicule AVANT cette demande, figé à la création (sert
+  /// à déterminer le hors-quota) — jamais recalculé ensuite. Cf. CLAUDE.md.
+  cumulMensuelAvant Int
+
+  dateCreation     DateTime @default(now())
+  dateModification DateTime @updatedAt
+
+  @@index([vehiculeId, statut])
+  @@index([statut])
+  @@index([demandeurId])
 }
