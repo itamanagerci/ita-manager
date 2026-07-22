@@ -99,3 +99,29 @@ export async function peutGererComptes(utilisateurId: string): Promise<boolean> 
 
   return acces !== null;
 }
+
+/**
+ * Vérifie l'accès réel de l'utilisateur (ses AccesUtilisateur actifs, pas sa
+ * Fonction déclarative) à N'IMPORTE QUEL sous-module actif d'un module donné
+ * — généralisation de peutGererComptes() sans filtrer sur un sous-module
+ * précis. Utilisée pour des vérifications transversales (ex. accès à la
+ * catégorie "RH" de l'archivage documentaire si l'utilisateur a accès au
+ * module rh OU direction-generale).
+ */
+export async function possedeAccesModule(
+  utilisateurId: string,
+  moduleCode: string,
+): Promise<boolean> {
+  const acces = await prisma.accesUtilisateur.findFirst({
+    where: {
+      utilisateurId,
+      actif: true,
+      sousModule: {
+        actif: true,
+        module: { code: moduleCode },
+      },
+    },
+  });
+
+  return acces !== null;
+}

@@ -118,21 +118,29 @@ export async function basculerStatutUtilisateur(
  * onDelete: Cascade et n'a donc pas besoin d'être vérifiée ici.
  */
 async function possedeDonneesLiees(utilisateurId: string): Promise<boolean> {
-  const [historique, demandesLiees, accesModifies, comptesCrees] = await Promise.all([
-    prisma.historiqueStatut.count({ where: { acteurId: utilisateurId } }),
-    prisma.demandeIndex.count({
-      where: {
-        OR: [
-          { demandeurId: utilisateurId },
-          { enAttenteValidationUtilisateurId: utilisateurId },
-        ],
-      },
-    }),
-    prisma.accesUtilisateur.count({ where: { modifieParId: utilisateurId } }),
-    prisma.utilisateur.count({ where: { creeParId: utilisateurId } }),
-  ]);
+  const [historique, demandesLiees, accesModifies, comptesCrees, documentsAjoutes] =
+    await Promise.all([
+      prisma.historiqueStatut.count({ where: { acteurId: utilisateurId } }),
+      prisma.demandeIndex.count({
+        where: {
+          OR: [
+            { demandeurId: utilisateurId },
+            { enAttenteValidationUtilisateurId: utilisateurId },
+          ],
+        },
+      }),
+      prisma.accesUtilisateur.count({ where: { modifieParId: utilisateurId } }),
+      prisma.utilisateur.count({ where: { creeParId: utilisateurId } }),
+      prisma.document.count({ where: { ajouteParId: utilisateurId } }),
+    ]);
 
-  return historique > 0 || demandesLiees > 0 || accesModifies > 0 || comptesCrees > 0;
+  return (
+    historique > 0 ||
+    demandesLiees > 0 ||
+    accesModifies > 0 ||
+    comptesCrees > 0 ||
+    documentsAjoutes > 0
+  );
 }
 
 export async function supprimerUtilisateur(

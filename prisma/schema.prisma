@@ -107,6 +107,8 @@ model Utilisateur {
 
   demandesIndexSoumises DemandeIndex[] @relation("DemandeIndexDemandeur")
   demandesIndexAValider DemandeIndex[] @relation("DemandeIndexValidateur")
+
+  documentsAjoutes Document[] @relation("UtilisateurAjouteDocument")
 }
 
 /// Droits d'accès individuels. Initialisés depuis FonctionModuleDefaut à la création
@@ -185,4 +187,36 @@ model DemandeIndex {
   @@index([enAttenteValidationUtilisateurId])
   @@index([enAttenteValidationDe])
   @@index([dateSoumission])
+}
+
+enum CategorieDocument {
+  CONTRATS
+  RH
+  JURIDIQUE
+  FACTURES
+  QHSE
+  ACHAT
+  TECHNIQUE
+  AUTRE
+}
+
+/// Lot 2 — Assistant de Direction / Archivage documentaire. Le fichier vit dans le
+/// bucket Storage privé "documents" (jamais public — cf. CLAUDE.md) ; cheminFichier
+/// est la clé d'objet interne (UUID, pas le nom original), nomFichierOriginal sert
+/// uniquement à l'affichage/au téléchargement.
+model Document {
+  id                 String            @id @default(cuid())
+  titre              String
+  cheminFichier      String
+  nomFichierOriginal String
+  categorie          CategorieDocument
+  dateAjout          DateTime          @default(now())
+
+  /// Même pattern que Utilisateur.creeParId (Lot 1) : nullable, pas de onDelete
+  /// Cascade — supprimer un utilisateur ayant archivé des documents est bloqué
+  /// par possedeDonneesLiees() (gestion-comptes.ts).
+  ajouteParId String?
+  ajoutePar   Utilisateur? @relation("UtilisateurAjouteDocument", fields: [ajouteParId], references: [id])
+
+  @@index([categorie])
 }
