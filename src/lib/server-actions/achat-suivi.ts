@@ -16,8 +16,9 @@ async function requireAccesSuiviDemandes() {
  * Assemble les 7 étapes du circuit pour la mini-timeline en lecture seule :
  * soumis → validation département → traitement Achat → validation
  * parallèle → BC émis → réception Logistique (via LigneBonDeCommande →
- * BonDeCommande → BonEntreeMagasin.bonDeCommandeId) → facturation DFC
- * (placeholder, Lot 8 pas construit). Une demande peut faire émettre
+ * BonDeCommande → BonEntreeMagasin.bonDeCommandeId, statut VALIDE
+ * uniquement — cf. CLAUDE.md) → facturation/paiement DFC (Lot 8,
+ * BonDeCommande.facture.paiement). Une demande peut faire émettre
  * plusieurs BC (un par fournisseur représenté dans ses lignes) — d'où la
  * liste bonsDeCommande plutôt qu'un singleton. Cf. CLAUDE.md.
  */
@@ -36,7 +37,10 @@ export async function listerSuiviDemandesAchat() {
           ligneBC: {
             include: {
               bonDeCommande: {
-                include: { bonsEntreeMagasin: true },
+                include: {
+                  bonsEntreeMagasin: true,
+                  facture: { include: { paiement: true } },
+                },
               },
             },
           },

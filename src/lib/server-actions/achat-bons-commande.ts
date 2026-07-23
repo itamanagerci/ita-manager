@@ -24,13 +24,37 @@ async function requireAccesBonsDeCommande() {
  * même forme que creerOuReutiliserDemandeReapprovisionnement() (Lot 6).
  * Cf. CLAUDE.md pour la mécanique ouvertMarqueur (NULL toujours distinct
  * dans @@unique([fournisseur, ouvertMarqueur])).
+ *
+ * Lot 8 (DFC) : lie aussi, en toile de fond, ce BC à un Fournisseur
+ * référencé (find-or-create par nom exact) — purement additif, jamais lu
+ * ni modifié le groupement ci-dessus qui reste basé sur la chaîne libre
+ * `fournisseur`. Aucun changement de comportement pour le Responsable
+ * Achat : il continue de taper un nom libre, inchangé. Cf. CLAUDE.md.
  */
 export async function trouverOuCreerBonDeCommandeOuvert(fournisseur: string) {
   const existant = await prisma.bonDeCommande.findFirst({
     where: { fournisseur, ouvertMarqueur: true },
   });
-  if (existant) return existant;
-  return prisma.bonDeCommande.create({ data: { fournisseur, ouvertMarqueur: true } });
+
+  const fournisseurRef = await prisma.fournisseur.upsert({
+    where: { nom: fournisseur },
+    update: {},
+    create: { nom: fournisseur },
+  });
+
+  if (existant) {
+    if (!existant.fournisseurId) {
+      return prisma.bonDeCommande.update({
+        where: { id: existant.id },
+        data: { fournisseurId: fournisseurRef.id },
+      });
+    }
+    return existant;
+  }
+
+  return prisma.bonDeCommande.create({
+    data: { fournisseur, ouvertMarqueur: true, fournisseurId: fournisseurRef.id },
+  });
 }
 
 /**
@@ -127,6 +151,39 @@ export async function listerBonsDeCommandePourReception() {
     where: { statut: "ENVOYE" },
     select: { id: true, numero: true, fournisseur: true },
     orderBy: { dateEnvoi: "desc" },
+  });
+}
+
+/**
+ * Lot 8 (DFC) : BC facturables/payables — statut ENVOYE, aucune Facture
+ * encore enregistrée, et au moins une réception CONFIRMÉE (BonEntreeMagasin
+ * statut=VALIDE, pas seulement "reçu" — c'est la validation par le
+ * Logisticien, pas la création par le Chef Magasin, qui atteste
+ * réellement la livraison). Cf. CLAUDE.md.
+ */
+export async function listerBonsDeCommandePayables() {
+  const utilisateur = await getCurrentUtilisateur();
+  if (!utilisateur) redirect("/login");
+  await requireAccesModule(utilisateur.id, "dfc", "paiement-standard");
+
+  return prisma.bonDeCommande.findMany({
+    where: {
+      statut: "ENVOYE",
+      facture: null,
+      bonsEntreeMagasin: { some: { statut: "VALIDE" } },
+    },
+    include: {
+      fournisseurRef: true,
+      bonsEntreeMagasin: { where: { statut: "VALIDE" } },
+      lignes: {
+        include: {
+          ligneDemandeAchat: {
+            include: { article: { select: { designation: true } }, demande: true },
+          },
+        },
+      },
+    },
+    orderBy: { dateEnvoi: "asc" },
   });
 }
 

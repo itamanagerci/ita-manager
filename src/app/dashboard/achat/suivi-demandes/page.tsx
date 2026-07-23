@@ -42,7 +42,18 @@ function construireEtapes(demande: SuiviDemandeAchat): EtapeSuivi[] {
         .map((bc) => [bc.id, bc]),
     ).values(),
   );
-  const bemAssocies = bonsDeCommandeUniques.flatMap((bc) => bc.bonsEntreeMagasin);
+  // Lot 8 : seule une réception CONFIRMÉE par le Logisticien (statut VALIDE)
+  // compte — la création par le Chef Magasin (EN_ATTENTE_VALIDATION) ne
+  // suffit pas, cf. CLAUDE.md.
+  const bemValides = bonsDeCommandeUniques.flatMap((bc) =>
+    bc.bonsEntreeMagasin.filter((bem) => bem.statut === "VALIDE"),
+  );
+  const facturesUniques = bonsDeCommandeUniques
+    .map((bc) => bc.facture)
+    .filter((facture): facture is NonNullable<typeof facture> => facture != null);
+  const paiementsUniques = facturesUniques
+    .map((facture) => facture.paiement)
+    .filter((paiement): paiement is NonNullable<typeof paiement> => paiement != null);
 
   return [
     {
@@ -98,18 +109,23 @@ function construireEtapes(demande: SuiviDemandeAchat): EtapeSuivi[] {
     },
     {
       libelle: "6. Réception Logistique",
-      tonalite: bemAssocies.length > 0 ? "succes" : "neutre",
+      tonalite: bemValides.length > 0 ? "succes" : "neutre",
       detail:
-        bemAssocies.length > 0
-          ? bemAssocies
+        bemValides.length > 0
+          ? bemValides
               .map((bem) => `BEM-${String(bem.numero).padStart(5, "0")} (${formatDate(bem.dateReception)})`)
               .join(", ")
-          : "Pas encore de réception enregistrée",
+          : "Pas encore de réception confirmée par le Logisticien",
     },
     {
       libelle: "7. Facturation DFC",
-      tonalite: "neutre",
-      detail: "En attente du module DFC (Lot 8)",
+      tonalite: paiementsUniques.length > 0 ? "succes" : facturesUniques.length > 0 ? "attention" : "neutre",
+      detail:
+        paiementsUniques.length > 0
+          ? `Payée le ${paiementsUniques.map((p) => formatDate(p.dateExecution)).join(", ")}`
+          : facturesUniques.length > 0
+            ? "Facturée — en attente de paiement"
+            : "En attente de facturation (DFC)",
     },
   ];
 }

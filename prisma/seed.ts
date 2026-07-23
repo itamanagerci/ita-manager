@@ -772,6 +772,41 @@ async function seedDirectionTechniqueTest() {
   }
 }
 
+/// Lot 8 (DFC) — Fournisseur durable, numéroWave pré-rempli pour tester le
+/// paiement mobile money sans passer par l'édition manuelle en interface.
+/// Déconnecté de tout BonDeCommande réel tant que la chaîne libre
+/// LigneDemandeAchat/BonDeCommande.fournisseur saisie par un testeur ne
+/// correspond pas exactement (comparaison stricte, cf.
+/// trouverOuCreerBonDeCommandeOuvert()) — sinon un Fournisseur distinct,
+/// sans numéroWave, est auto-créé.
+async function seedFournisseursTest() {
+  const fournisseurs = [
+    { nom: "Quincaillerie Test SARL", numeroWave: "0700000001" },
+    { nom: "Matériaux BTP Test", numeroWave: "0700000002" },
+  ];
+  for (const fournisseur of fournisseurs) {
+    await prisma.fournisseur.upsert({
+      where: { nom: fournisseur.nom },
+      update: { numeroWave: fournisseur.numeroWave },
+      create: fournisseur,
+    });
+  }
+}
+
+/// Lot 8 (DFC) — numéroWave pour chantier.test (persona "ouvrier"), pour
+/// tester le paiement de frais de mission en MOBILE_MONEY de bout en bout.
+/// Mise à jour inconditionnelle (pas seulement à la création) : ce compte
+/// existe déjà depuis les lots précédents dans une base déjà seedée, et
+/// seedUtilisateursTest() ne retouche jamais un utilisateur existant (`if
+/// (utilisateurExistant) continue`) — cf. CLAUDE.md pour cette limitation
+/// déjà documentée ailleurs.
+async function seedNumeroWaveTest() {
+  await prisma.utilisateur.updateMany({
+    where: { email: "chantier.test@itamanager.cloud" },
+    data: { numeroWave: "0700000099" },
+  });
+}
+
 /// Fiches article réelles (Lot 6, Livraison A) — rattachées à MAG-01,
 /// durables. "Gants de manutention" volontairement sous son seuil pour que
 /// seuil-alerte ait quelque chose à détecter sans manipulation préalable.
@@ -1056,6 +1091,8 @@ async function main() {
   await seedPointsInspection();
   await seedVehiculesTestLivraisonB();
   await seedParametresAchat();
+  await seedFournisseursTest();
+  await seedNumeroWaveTest();
 }
 
 main()

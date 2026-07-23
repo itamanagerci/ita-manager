@@ -85,6 +85,10 @@ model Utilisateur {
   prenom             String
   email              String             @unique
   telephone          String?
+  /// Lot 8 (DFC) : requis pour être bénéficiaire éligible d'un paiement
+  /// mobile money (standard MOBILE_MONEY ou Wave urgent) — vérifié et
+  /// refusé sinon, jamais fabriqué. Cf. CLAUDE.md.
+  numeroWave         String?
   niveauHierarchique NiveauHierarchique
   fonctionId         String
   fonction           Fonction           @relation(fields: [fonctionId], references: [id])
@@ -180,6 +184,13 @@ model Utilisateur {
   bonsCommandeEnvoyes        BonDeCommande[]
   piecesJointesDevisAjoutees PieceJointeDevis[]
   parametresAchatModifies    ParametresAchat[]
+
+  facturesEnregistrees       Facture[]                        @relation("UtilisateurEnregistreFacture")
+  paiementsExecutes          Paiement[]                       @relation("UtilisateurExecuteParPaiement")
+  demandesCodeUrgent         CodeAutorisationPaiementUrgent[] @relation("UtilisateurDemandeurCodeUrgent")
+  validationsCodeUrgent      CodeAutorisationPaiementUrgent[] @relation("UtilisateurValideurCodeUrgent")
+  paiementsUrgentsBeneficies PaiementUrgent[]                 @relation("UtilisateurBeneficiairePaiementUrgent")
+  paiementsUrgentsExecutes   PaiementUrgent[]                 @relation("UtilisateurExecuteurPaiementUrgent")
 }
 
 /// Droits d'accès individuels. Initialisés depuis FonctionModuleDefaut à la création
@@ -537,8 +548,9 @@ model DemandeMission {
   statut     StatutMission @default(EN_ATTENTE_RH)
   motifRefus String?
 
-  dateCreation     DateTime @default(now())
-  dateModification DateTime @updatedAt
+  dateCreation     DateTime  @default(now())
+  dateModification DateTime  @updatedAt
+  paiement         Paiement?
 
   @@index([employeConcerneId])
   @@index([statut])
@@ -1832,6 +1844,15 @@ model BonDeCommande {
   fournisseur String
   statut      StatutBonDeCommande @default(OUVERT)
 
+  /// Lot 8 (DFC) : lien auto-établi par trouverOuCreerBonDeCommandeOuvert()
+  /// (achat-bons-commande.ts) vers un Fournisseur référencé — champ
+  /// purement additif, jamais utilisé pour le groupement (qui reste basé
+  /// sur la chaîne `fournisseur` ci-dessus, inchangée). Nommé `fournisseurRef`
+  /// plutôt que `fournisseur` pour ne jamais confondre les deux champs à la
+  /// lecture. Cf. CLAUDE.md.
+  fournisseurId  String?
+  fournisseurRef Fournisseur? @relation(fields: [fournisseurId], references: [id])
+
   ouvertMarqueur Boolean?
 
   envoyeParId String?
@@ -1842,6 +1863,7 @@ model BonDeCommande {
   bonsEntreeMagasin BonEntreeMagasin[]
 
   dateCreation DateTime @default(now())
+  facture      Facture?
 
   @@unique([fournisseur, ouvertMarqueur])
   @@index([statut])
@@ -1887,4 +1909,173 @@ model ParametresAchat {
   modifieParId     String?
   modifiePar       Utilisateur? @relation(fields: [modifieParId], references: [id])
   dateModification DateTime     @updatedAt
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Lot 8 — DFC / Finances et Comptabilité. Referme deux dépendances
+// laissées volontairement terminales par des lots antérieurs :
+// DemandeMission (Lot 4, VALIDEE_RH + fraisDeclares en attente de
+// paiement) et BonDeCommande (Lot 7, BC_EMIS en attente de
+// facturation/paiement). Introduit un circuit de paiement urgent Wave —
+// SIMULÉ, aucune vraie clé API n'existe dans ce projet, cf.
+// appellerApiWaveSimulee() (lib/paiement-urgent-wave.ts) et la mise en
+// garde dédiée dans CLAUDE.md. Cf. CLAUDE.md pour le raisonnement complet.
+// ─────────────────────────────────────────────────────────────────────────
+
+enum StatutCodeAutorisationPaiementUrgent {
+  EN_ATTENTE_DG
+  VALIDE
+  REFUSE
+  UTILISE
+  /// Valeur cosmétique seulement — jamais posée par un job planifié (aucune
+  /// infra cron dans ce projet). demanderCodeAutorisation() la pose de
+  /// façon opportuniste sur un ancien code VALIDE-mais-expiré au moment où
+  /// elle retombe dessus (vérification anti-doublon) — un confort de
+  /// lecture, jamais requis pour la correction : tout chemin de
+  /// lecture/consommation revérifie dateExpiration > now() indépendamment
+  /// de ce champ. Cf. CLAUDE.md.
+  EXPIRE
+}
+
+/// Référentiel fournisseur — lié en toile de fond par
+/// trouverOuCreerBonDeCommandeOuvert() (achat-bons-commande.ts), jamais
+/// saisi directement par le Responsable Achat (qui continue de taper un
+/// nom libre sur LigneDemandeAchat/BonDeCommande.fournisseur, inchangé).
+/// nom est la clé naturelle unique (pas de code court comme Magasin — les
+/// fournisseurs n'en ont pas dans ce projet). Cf. CLAUDE.md.
+model Fournisseur {
+  id         String  @id @default(cuid())
+  nom        String  @unique
+  numeroWave String?
+  actif      Boolean @default(true)
+
+  bonsDeCommande   BonDeCommande[]
+  paiementsUrgents PaiementUrgent[] @relation("FournisseurBeneficiairePaiementUrgent")
+
+  dateCreation DateTime @default(now())
+}
+
+/// Facture reçue d'un fournisseur, liée à un BonDeCommande — scope
+/// volontairement minimal, un BC = une Facture (bonDeCommandeId unique).
+/// Si un besoin de facturation partielle/multiple par BC apparaît dans un
+/// lot futur, ce @unique est le premier endroit à revisiter. Cf. CLAUDE.md.
+model Facture {
+  id              String        @id @default(cuid())
+  bonDeCommandeId String        @unique
+  bonDeCommande   BonDeCommande @relation(fields: [bonDeCommandeId], references: [id])
+
+  referenceFournisseur String
+  montant              Decimal  @db.Decimal(14, 2)
+  dateFacture          DateTime
+
+  enregistreParId String?
+  enregistrePar   Utilisateur? @relation("UtilisateurEnregistreFacture", fields: [enregistreParId], references: [id])
+
+  dateEnregistrement DateTime @default(now())
+
+  paiement Paiement?
+
+  @@index([bonDeCommandeId])
+}
+
+/// Exécution réelle d'un paiement (circuit standard) — exactement UN des
+/// deux liens (factureId/demandeMissionId), jamais les deux, jamais aucun :
+/// appliqué en code, pas en contrainte DB, même idiome que
+/// DemandeMateriel.projetId?/chantierLibre? — pas le pattern polymorphe
+/// entiteType+entiteId (réservé aux tables génériques HistoriqueStatut/
+/// DemandeIndex/Notification), deux vraies relations Prisma distinctes ici
+/// car exactement deux parents possibles, connus à l'avance. Pas de champ
+/// statut : la création EST le paiement (DFC "exécute" en une seule étape
+/// — le BC/la Mission ont déjà traversé leur propre circuit de validation
+/// complet, rien à revalider ici). Cf. CLAUDE.md.
+model Paiement {
+  id String @id @default(cuid())
+
+  factureId String?  @unique
+  facture   Facture? @relation(fields: [factureId], references: [id])
+
+  demandeMissionId String?         @unique
+  demandeMission   DemandeMission? @relation(fields: [demandeMissionId], references: [id])
+
+  montant       Decimal           @db.Decimal(14, 2)
+  /// Réutilise TypePaiementAchat (Lot 7) tel quel — déjà générique,
+  /// dupliquer un enum identique serait un pur doublon.
+  mode          TypePaiementAchat
+  reference     String?
+  dateExecution DateTime          @default(now())
+
+  executeParId String?
+  executePar   Utilisateur? @relation("UtilisateurExecuteParPaiement", fields: [executeParId], references: [id])
+
+  @@index([factureId])
+  @@index([demandeMissionId])
+}
+
+/// Étapes 1-3 du circuit Wave urgent : demande de code par DFC, diffusion
+/// "broadcast" DG (même forme que DemandeAppelOffres —
+/// EN_ATTENTE_DG/VALIDE/REFUSE), consommation exactement unique à
+/// l'étape 5 (PaiementUrgent). Le code n'est généré qu'à la validation
+/// (jamais à la demande) — cf. randomInt() dans mot-de-passe-temporaire.ts
+/// pour le précédent direct. Validité 24h vérifiée à la lecture/
+/// consommation, jamais par un job planifié (aucune infra cron dans ce
+/// projet). Cf. CLAUDE.md.
+model CodeAutorisationPaiementUrgent {
+  id String @id @default(cuid())
+
+  demandeurId   String
+  demandeur     Utilisateur @relation("UtilisateurDemandeurCodeUrgent", fields: [demandeurId], references: [id])
+  justification String
+
+  statut     StatutCodeAutorisationPaiementUrgent @default(EN_ATTENTE_DG)
+  motifRefus String?
+
+  /// Généré (6 chiffres) seulement au moment de validerCodeAutorisation() —
+  /// null tant que statut=EN_ATTENTE_DG.
+  code           String?
+  valideParId    String?
+  validePar      Utilisateur? @relation("UtilisateurValideurCodeUrgent", fields: [valideParId], references: [id])
+  dateValidation DateTime?
+  dateExpiration DateTime?
+
+  dateUtilisation DateTime?
+
+  paiementUrgent PaiementUrgent?
+
+  dateCreation DateTime @default(now())
+
+  @@index([demandeurId])
+  @@index([statut])
+}
+
+/// Étape 5 — entièrement autonome, hors circuit standard : aucun lien vers
+/// Facture/DemandeMission (décision confirmée). referenceSimulee est nommé
+/// pour ne JAMAIS être confondu avec une vraie référence de transaction —
+/// cf. appellerApiWaveSimulee() (lib/paiement-urgent-wave.ts) et la
+/// section sécurité dédiée dans CLAUDE.md. Pas de champ statut : la ligne
+/// existe seulement une fois exécutée (même raisonnement que Paiement
+/// ci-dessus) — aucune action d'édition/annulation n'a de sens sur une
+/// ligne créée ici, conformément à l'irréversibilité du circuit.
+model PaiementUrgent {
+  id String @id @default(cuid())
+
+  codeAutorisationId String                         @unique
+  codeAutorisation   CodeAutorisationPaiementUrgent @relation(fields: [codeAutorisationId], references: [id])
+
+  // Bénéficiaire : exactement l'un des deux, appliqué en code (même idiome
+  // "somme de type via deux FK nullables" que Paiement ci-dessus).
+  beneficiaireUtilisateurId String?
+  beneficiaireUtilisateur   Utilisateur? @relation("UtilisateurBeneficiairePaiementUrgent", fields: [beneficiaireUtilisateurId], references: [id])
+  beneficiaireFournisseurId String?
+  beneficiaireFournisseur   Fournisseur? @relation("FournisseurBeneficiairePaiementUrgent", fields: [beneficiaireFournisseurId], references: [id])
+
+  montant Decimal @db.Decimal(14, 2)
+
+  executeParId String
+  executePar   Utilisateur @relation("UtilisateurExecuteurPaiementUrgent", fields: [executeParId], references: [id])
+
+  referenceSimulee String
+  dateExecution    DateTime @default(now())
+
+  @@index([beneficiaireUtilisateurId])
+  @@index([beneficiaireFournisseurId])
 }

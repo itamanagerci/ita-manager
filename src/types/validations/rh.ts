@@ -13,6 +13,9 @@ export const profilRHSchema = z
     salaireFixe: z.number().positive().optional(),
     entrepriseRattachee: z.string().optional(),
     tauxJournalier: z.number().positive().optional(),
+    // Lot 8 (DFC) : requis pour être bénéficiaire éligible d'un paiement
+    // mobile money (standard ou Wave urgent).
+    numeroWave: z.string().optional(),
   })
   .superRefine((donnees, ctx) => {
     if (donnees.typeProfil === "AGENT" && !donnees.salaireFixe) {

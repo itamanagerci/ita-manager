@@ -25,6 +25,7 @@ interface ProfilRHFormProps {
     tauxJournalier: number | null;
   } | null;
   superieurActuelId: string | null;
+  numeroWaveActuel: string | null;
   utilisateursDisponibles: { id: string; nom: string; prenom: string }[];
 }
 
@@ -38,6 +39,7 @@ export function ProfilRHForm({
   utilisateurId,
   profilExistant,
   superieurActuelId,
+  numeroWaveActuel,
   utilisateursDisponibles,
 }: ProfilRHFormProps) {
   const router = useRouter();
@@ -61,6 +63,7 @@ export function ProfilRHForm({
         : "",
       soldeConges: profilExistant?.soldeConges ?? 0,
       superieurId: superieurActuelId ?? "",
+      numeroWave: numeroWaveActuel ?? "",
       salaireFixe: profilExistant?.salaireFixe ?? undefined,
       entrepriseRattachee: profilExistant?.entrepriseRattachee ?? "",
       tauxJournalier: profilExistant?.tauxJournalier ?? undefined,
@@ -114,6 +117,15 @@ export function ProfilRHForm({
           </NativeSelect>
         </FormField>
       </div>
+
+      <FormField
+        label="Numéro Wave"
+        htmlFor="numeroWave"
+        error={errors.numeroWave?.message}
+        helperText="Requis pour être bénéficiaire d'un paiement mobile money (DFC)"
+      >
+        <Input id="numeroWave" {...register("numeroWave")} />
+      </FormField>
 
       <div className="grid grid-cols-2 gap-4">
         <FormField label="Poste" htmlFor="poste" error={errors.poste?.message}>

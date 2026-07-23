@@ -183,6 +183,7 @@ export default async function DetailUtilisateurPage({ params }: DetailUtilisateu
                     : null
                 }
                 superieurActuelId={cible.superieurId}
+                numeroWaveActuel={cible.numeroWave}
                 utilisateursDisponibles={utilisateursActifs}
               />
             ) : cible.profilEmploye ? (

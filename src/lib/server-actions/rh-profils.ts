@@ -31,7 +31,7 @@ export async function mettreAJourProfilRH(
   await prisma.$transaction([
     prisma.utilisateur.update({
       where: { id: utilisateurId },
-      data: { superieurId },
+      data: { superieurId, numeroWave: donnees.numeroWave || null },
     }),
     prisma.profilEmploye.upsert({
       where: { utilisateurId },

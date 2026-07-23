@@ -163,6 +163,12 @@ async function possedeDonneesLiees(utilisateurId: string): Promise<boolean> {
     demandesBonSortieTransfert,
     expeditionsBonSortieTransfert,
     responsabiliteSortieTransfert,
+    facturesEnregistrees,
+    paiementsExecutes,
+    demandesCodeUrgent,
+    validationsCodeUrgent,
+    paiementsUrgentsBeneficies,
+    paiementsUrgentsExecutes,
   ] = await Promise.all([
     prisma.historiqueStatut.count({ where: { acteurId: utilisateurId } }),
     prisma.demandeIndex.count({
@@ -221,6 +227,13 @@ async function possedeDonneesLiees(utilisateurId: string): Promise<boolean> {
     prisma.bonSortieTransfert.count({ where: { demandeurId: utilisateurId } }),
     prisma.bonSortieTransfert.count({ where: { expediteurConvoyeurId: utilisateurId } }),
     prisma.bonSortieTransfert.count({ where: { responsableSortieId: utilisateurId } }),
+    // Lot 8 (DFC)
+    prisma.facture.count({ where: { enregistreParId: utilisateurId } }),
+    prisma.paiement.count({ where: { executeParId: utilisateurId } }),
+    prisma.codeAutorisationPaiementUrgent.count({ where: { demandeurId: utilisateurId } }),
+    prisma.codeAutorisationPaiementUrgent.count({ where: { valideParId: utilisateurId } }),
+    prisma.paiementUrgent.count({ where: { beneficiaireUtilisateurId: utilisateurId } }),
+    prisma.paiementUrgent.count({ where: { executeParId: utilisateurId } }),
   ]);
 
   return (
@@ -267,7 +280,13 @@ async function possedeDonneesLiees(utilisateurId: string): Promise<boolean> {
     chefChantierInspectionEngin > 0 ||
     demandesBonSortieTransfert > 0 ||
     expeditionsBonSortieTransfert > 0 ||
-    responsabiliteSortieTransfert > 0
+    responsabiliteSortieTransfert > 0 ||
+    facturesEnregistrees > 0 ||
+    paiementsExecutes > 0 ||
+    demandesCodeUrgent > 0 ||
+    validationsCodeUrgent > 0 ||
+    paiementsUrgentsBeneficies > 0 ||
+    paiementsUrgentsExecutes > 0
   );
 }
 
