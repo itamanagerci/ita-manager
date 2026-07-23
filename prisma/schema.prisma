@@ -191,6 +191,27 @@ model Utilisateur {
   validationsCodeUrgent      CodeAutorisationPaiementUrgent[] @relation("UtilisateurValideurCodeUrgent")
   paiementsUrgentsBeneficies PaiementUrgent[]                 @relation("UtilisateurBeneficiairePaiementUrgent")
   paiementsUrgentsExecutes   PaiementUrgent[]                 @relation("UtilisateurExecuteurPaiementUrgent")
+
+  accueilSecurite                     AccueilSecurite?           @relation("UtilisateurAccueilSecurite")
+  accueilsSecuriteResponsable         AccueilSecurite[]          @relation("UtilisateurResponsableAccueilSecurite")
+  fichesASTChef                       FicheAST[]                 @relation("UtilisateurChefChantierAST")
+  fichesASTRelaisQHSE                 FicheAST[]                 @relation("UtilisateurRelaisQHSEAST")
+  attributionsEPIBeneficiees          AttributionEPI[]           @relation("UtilisateurBeneficiaireAttributionEPI")
+  attributionsEPIEffectuees           AttributionEPI[]           @relation("UtilisateurEffectueAttributionEPI")
+  inspectionsHSEResponsable           InspectionHSE[]            @relation("UtilisateurResponsableInspectionHSE")
+  inspectionsHSERelaisQHSE            InspectionHSE[]            @relation("UtilisateurRelaisQHSEInspectionHSE")
+  inspectionsHSEChefChantier          InspectionHSE[]            @relation("UtilisateurChefChantierInspectionHSE")
+  photosInspectionHSEAjoutees         PhotoInspectionHSE[]       @relation("UtilisateurAjoutePhotoInspectionHSE")
+  rapportsHebdoQHSE                   RapportHebdoQHSE[]         @relation("UtilisateurRelaisQHSERapportHebdo")
+  programmesSensibilisationCrees      ProgrammeSensibilisation[] @relation("UtilisateurCreeProgrammeSensibilisation")
+  pvSensibilisationVises              PVSensibilisation[]        @relation("UtilisateurVisaServiceQHSEPV")
+  rapportsIncidentReportes            RapportIncident[]          @relation("UtilisateurReporteParRapportIncident")
+  rapportsIncidentCrees               RapportIncident[]          @relation("UtilisateurCreeRapportIncident")
+  photosRapportIncidentAjoutees       PhotoRapportIncident[]     @relation("UtilisateurAjoutePhotoRapportIncident")
+  nonConformitesIdentifiees           NonConformite[]            @relation("UtilisateurIdentificateurNonConformite")
+  nonConformitesResponsableMiseOeuvre NonConformite[]            @relation("UtilisateurResponsableMiseOeuvreNonConformite")
+  nonConformitesResponsableQHSE       NonConformite[]            @relation("UtilisateurResponsableQHSENonConformite")
+  photosNonConformiteAjoutees         PhotoNonConformite[]       @relation("UtilisateurAjoutePhotoNonConformite")
 }
 
 /// Droits d'accès individuels. Initialisés depuis FonctionModuleDefaut à la création
@@ -657,6 +678,18 @@ model Projet {
   demandesAchatChantier  DemandeAchat[] @relation("DemandeAchatChantier")
   demandesAchatLivraison DemandeAchat[] @relation("DemandeAchatLieuLivraison")
 
+  /// Lot 9 (QHSE) — même paire projetId?/chantierLibre? que DemandeMateriel/
+  /// DemandeAchat sur chacun des nouveaux modèles QHSE (beaucoup de fiches
+  /// concernent une base vie/un garage qui n'est jamais devenu un vrai
+  /// Projet). Cf. CLAUDE.md.
+  accueilsSecurite          AccueilSecurite[]
+  fichesAST                 FicheAST[]
+  attributionsEPI           AttributionEPI[]
+  inspectionsHSE            InspectionHSE[]
+  rapportsHebdoQHSE         RapportHebdoQHSE[]
+  programmesSensibilisation ProgrammeSensibilisation[]
+  rapportsIncident          RapportIncident[]
+
   @@index([chefProjetId])
 }
 
@@ -824,6 +857,7 @@ model Materiel {
   lignesDMS                   LigneDemandeMiseADisposition[]
   lignesBEM                   LigneBonEntreeMagasin[]
   lignesBonSortieTransfert    LigneBonSortieTransfert[]
+  attributionEPIs             AttributionEPI[]
 
   @@index([categorieId])
   @@index([magasinId])
@@ -961,6 +995,11 @@ model MouvementStock {
   effectuePar   Utilisateur? @relation("UtilisateurMouvementStock", fields: [effectueParId], references: [id])
 
   date DateTime @default(now())
+
+  /// Lot 9 (QHSE) — trace inverse vers l'AttributionEPI qui a déclenché ce
+  /// mouvement (FK vit sur AttributionEPI), même idiome que
+  /// BonEntreeMagasin.demandeReapprovisionnementId en sens inverse.
+  attributionEPI AttributionEPI?
 
   @@index([materielId, date])
   @@index([type])
@@ -1395,6 +1434,11 @@ model ReponseChecklistTransport {
 enum CategorieInspection {
   VEHICULE
   ENGIN
+  /// Lot 9 (QHSE) — Inspection HSE, 26 points réels. Réutilise cette même
+  /// table référentielle plutôt qu'une nouvelle (déjà entièrement générique
+  /// — aucun champ propre à véhicule/engin sur PointInspection lui-même).
+  /// Cf. CLAUDE.md.
+  HSE
 }
 
 enum EtatPointInspection {
@@ -1403,9 +1447,10 @@ enum EtatPointInspection {
   ABSENT
 }
 
-/// Référentiel seedé — 30 points véhicule + 27 points engin. Table (pas
-/// enum), corrigeable sans migration. Contenu partiellement placeholder —
-/// cf. CLAUDE.md.
+/// Référentiel seedé — 30 points véhicule + 27 points engin + 26 points HSE
+/// (Lot 9, contenu réel du document Workflow_QHSE_ITA_COMPLET_v2). Table
+/// (pas enum), corrigeable sans migration. Contenu véhicule/engin
+/// partiellement placeholder — cf. CLAUDE.md.
 model PointInspection {
   id        String              @id @default(cuid())
   categorie CategorieInspection
@@ -1416,6 +1461,7 @@ model PointInspection {
 
   reponsesVehicule ReponsePointInspectionVehicule[]
   reponsesEngin    ReponsePointInspectionEngin[]
+  reponsesHSE      ReponsePointInspectionHSE[]
 }
 
 /// Référentiel seedé — 10 documents véhicule + 4 documents engin, contenu
@@ -2078,4 +2124,619 @@ model PaiementUrgent {
 
   @@index([beneficiaireUtilisateurId])
   @@index([beneficiaireFournisseurId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Lot 9 — Service QHSE. Les 9 flux officiels (WF-QHSE-001), contenu réel du
+// document "Workflow_QHSE_ITA_COMPLET_v2" fourni par l'utilisateur (pas un
+// cadrage paraphrasé) — chaque champ ci-dessous trace directement à ce
+// document. Deux points de continuité structurants : Stock EPI (4.3)
+// réutilise Materiel/CategorieMateriel("EPI")/MouvementStock (Lot 6) sans
+// dupliquer de modèle de stock, mais AVEC un suivi nominatif réel
+// (AttributionEPI, la fiche papier réelle étant nominative) ; Accueil
+// Sécurité (4.1) est déclenché par initialiserAccueilSecurite(), une
+// fonction PARTAGÉE appelée à la fois par creerCompteUtilisateur() et par
+// seedUtilisateursTest() (qui a sa propre logique de création de compte
+// indépendante, cf. CLAUDE.md). Non-Conformité (4.7) est un point d'arrivée
+// partagé entre deux origines (Inspection HSE / Rapport Incident), créé de
+// façon idempotente via creerOuReutiliserNonConformite() — même principe
+// que creerOuReutiliserDemandeReapprovisionnement() (Lot 6). Cf. CLAUDE.md
+// pour le raisonnement complet.
+// ─────────────────────────────────────────────────────────────────────────
+
+enum StatutAccueilSecurite {
+  EN_ATTENTE
+  EFFECTUE
+}
+
+enum StatutTravailleurAccueil {
+  PERMANENT
+  OCCASIONNEL
+  VISITEUR
+}
+
+/// Flux 1 — créée automatiquement par initialiserAccueilSecurite()
+/// (user-provisioning.ts) à CHAQUE création de compte, jamais manuellement.
+/// 1:1 avec Utilisateur (une seule fiche par compte). NOM/PRÉNOM/FONCTION ne
+/// sont jamais stockés ici : "pré-remplis depuis le module RH" sur le
+/// formulaire réel = lus depuis Utilisateur/Fonction à l'affichage, jamais
+/// dupliqués. Limitation connue, non corrigée : un vrai VISITEUR sans
+/// compte ITA Digital n'a pas de fiche — hors scope de ce lot. Enregistrement
+/// de conformité PERMANENT — pas de cascade sur utilisateurId (contrairement
+/// à ProfilEmploye, qui appartient entièrement au compte), bloqué par
+/// possedeDonneesLiees() comme tout autre enregistrement d'audit. Cf.
+/// CLAUDE.md.
+model AccueilSecurite {
+  id            String      @id @default(cuid())
+  utilisateurId String      @unique
+  utilisateur   Utilisateur @relation("UtilisateurAccueilSecurite", fields: [utilisateurId], references: [id])
+
+  projetId      String?
+  projet        Projet? @relation(fields: [projetId], references: [id])
+  chantierLibre String?
+
+  age                             Int?
+  statutTravailleur               StatutTravailleurAccueil?
+  contactsTelephone               String?
+  lieuHabitation                  String?
+  personneContactUrgenceNom       String?
+  personneContactUrgenceTelephone String?
+
+  /// 10 items fixes (Casque de chantier, Chaussures de sécurité, Bottes de
+  /// sécurité, Vêtements de travail, Gilet rétro-réfléchissant, Lunettes de
+  /// protection, Gants de protection, Protecteur antibruit, Protection
+  /// respiratoire, Protection antichute).
+  epiRecus          String[] @default([])
+  autresEquipements String?
+
+  /// 17 items fixes — cf. Workflow_QHSE_ITA_COMPLET_v2, section III.
+  informationsFormationsRecues String[] @default([])
+  /// 5 items fixes — cf. section IV.
+  sensibilisationsConduites    String[] @default([])
+
+  statut StatutAccueilSecurite @default(EN_ATTENTE)
+
+  dateSignatureTravailleur DateTime?
+
+  responsableAccueilId     String?
+  responsableAccueil       Utilisateur? @relation("UtilisateurResponsableAccueilSecurite", fields: [responsableAccueilId], references: [id])
+  dateSignatureResponsable DateTime?
+
+  dateCreation     DateTime @default(now())
+  dateModification DateTime @updatedAt
+
+  @@index([statut])
+}
+
+enum StatutAST {
+  EN_ATTENTE_VALIDATION_QHSE
+  VALIDEE
+  REFUSEE
+}
+
+/// Flux 2 — circuit de validation standard avant démarrage d'une tâche à
+/// risque : Chef Chantier/Chef d'équipe crée, Relais QHSE valide. "Relais
+/// QHSE" n'est pas une Fonction séparée (cf. CLAUDE.md) : la validation est
+/// gatée par possedeAccesSousModule(acteur, "qhse", "ast") — mais ce même
+/// accès est aussi détenu par le créateur (Chef de chantier a "ast" par
+/// défaut), donc validerAST() ajoute la garde acteurId !== chefChantierId
+/// pour empêcher l'auto-validation (cf. qhse-ast.ts). Pas de DemandeIndex :
+/// circuit interne QHSE, aucune cible DG.
+model FicheAST {
+  id     String @id @default(cuid())
+  numero Int    @unique @default(autoincrement())
+
+  projetId      String?
+  projet        Projet? @relation(fields: [projetId], references: [id])
+  chantierLibre String?
+
+  chefChantierId            String
+  chefChantier              Utilisateur @relation("UtilisateurChefChantierAST", fields: [chefChantierId], references: [id])
+  dateSignatureChefChantier DateTime?
+
+  relaisQHSEId            String?
+  relaisQHSE              Utilisateur? @relation("UtilisateurRelaisQHSEAST", fields: [relaisQHSEId], references: [id])
+  dateSignatureRelaisQHSE DateTime?
+
+  statut     StatutAST @default(EN_ATTENTE_VALIDATION_QHSE)
+  motifRefus String?
+
+  taches TacheAST[]
+
+  dateCreation     DateTime @default(now())
+  dateModification DateTime @updatedAt
+
+  @@index([statut])
+}
+
+model TacheAST {
+  id                String   @id @default(cuid())
+  astId             String
+  ast               FicheAST @relation(fields: [astId], references: [id], onDelete: Cascade)
+  ordre             Int
+  ressources        String
+  risques           String
+  mesuresPrevention String
+}
+
+/// Flux 3 — sortie nominative d'EPI (la fiche papier réelle est nominative :
+/// Nom/Prénoms, Désignation EPI, Qté Sortie, Retour). Décrémente Materiel/
+/// crée un MouvementStock SORTIE via le même pattern atomique que
+/// flux-sortie.ts (updateMany conditionnel, count===0 → refus). Pas de
+/// nouveau modèle de stock : materielId pointe vers un Materiel EXISTANT
+/// (catégorie EPI) ; qhse/stock-epi fait une lecture filtrée sur
+/// categorie.code==="EPI", gatée par requireAccesModule("qhse","stock-epi")
+/// seul, indépendamment de tout accès Logistique. Cf. CLAUDE.md.
+model AttributionEPI {
+  id     String @id @default(cuid())
+  numero Int    @unique @default(autoincrement())
+
+  date          DateTime @default(now())
+  projetId      String?
+  projet        Projet?  @relation(fields: [projetId], references: [id])
+  chantierLibre String?
+  lieu          String?
+
+  beneficiaireId String
+  beneficiaire   Utilisateur @relation("UtilisateurBeneficiaireAttributionEPI", fields: [beneficiaireId], references: [id])
+
+  materielId     String
+  materiel       Materiel @relation(fields: [materielId], references: [id])
+  quantiteSortie Int
+  retourEpiUsage Boolean  @default(false)
+
+  effectueParId String?
+  effectuePar   Utilisateur? @relation("UtilisateurEffectueAttributionEPI", fields: [effectueParId], references: [id])
+
+  /// Trace vers le MouvementStock SORTIE déclenché par cette attribution.
+  mouvementStockId String?         @unique
+  mouvementStock   MouvementStock? @relation(fields: [mouvementStockId], references: [id])
+
+  dateCreation DateTime @default(now())
+
+  @@index([beneficiaireId])
+  @@index([materielId])
+}
+
+enum ReponseInspectionHSE {
+  OUI
+  NON
+}
+
+/// Flux 4A — Inspection HSE, 26 points réels (Base vie ×8, Poste de travail
+/// ×5, Sensibilisation & EPI ×9, Personnel chantier ×2, Gestion déchets
+/// ×2), réutilise PointInspection (catégorie HSE). Enregistrement direct,
+/// aucun circuit de validation propre (même précédent que
+/// InspectionVehicule/InspectionEngin, Lot 6) — un NON déclenche
+/// creerOuReutiliserNonConformite() par point, idempotent. Cf. CLAUDE.md.
+model InspectionHSE {
+  id     String @id @default(cuid())
+  numero Int    @unique @default(autoincrement())
+
+  projetId           String?
+  projet             Projet? @relation(fields: [projetId], references: [id])
+  chantierLibre      String?
+  projetOuvrageLibre String?
+  lieu               String?
+
+  date  DateTime
+  heure String?
+
+  reponsesPoints ReponsePointInspectionHSE[]
+  photos         PhotoInspectionHSE[]
+  commentaires   String?
+
+  responsableInspectionId  String
+  responsableInspection    Utilisateur @relation("UtilisateurResponsableInspectionHSE", fields: [responsableInspectionId], references: [id])
+  dateSignatureResponsable DateTime?
+
+  relaisQHSEId            String?
+  relaisQHSE              Utilisateur? @relation("UtilisateurRelaisQHSEInspectionHSE", fields: [relaisQHSEId], references: [id])
+  dateSignatureRelaisQHSE DateTime?
+
+  chefChantierId            String?
+  chefChantier              Utilisateur? @relation("UtilisateurChefChantierInspectionHSE", fields: [chefChantierId], references: [id])
+  dateSignatureChefChantier DateTime?
+
+  dateCreation DateTime @default(now())
+
+  @@index([projetId])
+}
+
+model ReponsePointInspectionHSE {
+  id           String               @id @default(cuid())
+  inspectionId String
+  inspection   InspectionHSE        @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+  pointId      String
+  point        PointInspection      @relation(fields: [pointId], references: [id])
+  reponse      ReponseInspectionHSE
+  observation  String?
+
+  nonConformite NonConformite?
+
+  @@unique([inspectionId, pointId])
+}
+
+/// Bucket Storage privé "documents" (Lot 2), préfixe "qhse/inspection-hse/".
+model PhotoInspectionHSE {
+  id                 String        @id @default(cuid())
+  inspectionId       String
+  inspection         InspectionHSE @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+  cheminFichier      String
+  nomFichierOriginal String
+  ajouteParId        String?
+  ajoutePar          Utilisateur?  @relation("UtilisateurAjoutePhotoInspectionHSE", fields: [ajouteParId], references: [id])
+  dateAjout          DateTime      @default(now())
+}
+
+/// Flux 4B — saisie périodique par chantier, pas de circuit de validation.
+/// 6 jours fixes SANS Dimanche (Vendredi→Jeudi, réel, pas une erreur — cf.
+/// CLAUDE.md).
+model RapportHebdoQHSE {
+  id     String @id @default(cuid())
+  numero Int    @unique @default(autoincrement())
+
+  projetId      String?
+  projet        Projet? @relation(fields: [projetId], references: [id])
+  chantierLibre String?
+
+  relaisQHSEId String
+  relaisQHSE   Utilisateur @relation("UtilisateurRelaisQHSERapportHebdo", fields: [relaisQHSEId], references: [id])
+
+  semaineDu DateTime
+  semaineAu DateTime
+
+  effectifVendredi Int
+  effectifSamedi   Int
+  effectifLundi    Int
+  effectifMardi    Int
+  effectifMercredi Int
+  effectifJeudi    Int
+
+  activitesQHSE               String
+  constatsEffectues           String
+  propositionsRecommandations String
+
+  dateSignature DateTime?
+
+  dateCreation     DateTime @default(now())
+  dateModification DateTime @updatedAt
+
+  @@index([projetId])
+}
+
+enum LieuPVSensibilisation {
+  CHANTIER
+  BUREAUX
+  GARAGE
+  AUTRE
+}
+
+/// Flux 5A — conteneur période (chantier + période du/au) planifiant
+/// PLUSIEURS séances (tableau Date/Thème/Animateur/Commentaire sur le
+/// document réel) — structure à 3 niveaux, cf. CLAUDE.md.
+model ProgrammeSensibilisation {
+  id String @id @default(cuid())
+
+  projetId      String?
+  projet        Projet? @relation(fields: [projetId], references: [id])
+  chantierLibre String?
+
+  periodeDu DateTime
+  periodeAu DateTime
+
+  creeParId String?
+  creePar   Utilisateur? @relation("UtilisateurCreeProgrammeSensibilisation", fields: [creeParId], references: [id])
+
+  seances SeanceSensibilisation[]
+
+  dateCreation     DateTime @default(now())
+  dateModification DateTime @updatedAt
+}
+
+/// Une ligne du tableau du Programme — appartient entièrement à son
+/// Programme (cascade correcte, même logique que PointValidation→Projet).
+model SeanceSensibilisation {
+  id          String                   @id @default(cuid())
+  programmeId String
+  programme   ProgrammeSensibilisation @relation(fields: [programmeId], references: [id], onDelete: Cascade)
+
+  date        DateTime
+  theme       String
+  animateur   String
+  commentaire String?
+
+  pv PVSensibilisation?
+}
+
+/// Flux 5B — référence EXACTEMENT une Séance (1:1, @@unique sur seanceId).
+/// Enregistrement PERMANENT (procès-verbal signé) — pas de cascade depuis
+/// Seance, bloque la suppression d'une Séance déjà pourvue d'un PV, même
+/// posture "bloquer par défaut" que le reste des enregistrements QHSE.
+model PVSensibilisation {
+  id       String                @id @default(cuid())
+  seanceId String                @unique
+  seance   SeanceSensibilisation @relation(fields: [seanceId], references: [id])
+
+  animateur          String
+  date               DateTime
+  heure              String?
+  lieu               String?
+  chantierType       LieuPVSensibilisation
+  lieuAutrePrecision String?
+
+  /// 17 items fixes — cf. Workflow_QHSE_ITA_COMPLET_v2.
+  sujetsAbordes               String[] @default([])
+  sujetsAbordesAutrePrecision String?
+  pointsSpecifiquesAbordes    String?
+
+  participants ParticipantPVSensibilisation[]
+
+  resumeSensibilisation String?
+
+  animateurVisaDate   DateTime?
+  serviceQHSEVisaId   String?
+  serviceQHSEVisa     Utilisateur? @relation("UtilisateurVisaServiceQHSEPV", fields: [serviceQHSEVisaId], references: [id])
+  serviceQHSEVisaDate DateTime?
+  observation         String?
+
+  dateCreation DateTime @default(now())
+}
+
+/// Table du bas du PV (jusqu'à 14 lignes) — participants pas nécessairement
+/// des Utilisateur (ouvriers journaliers, sous-traitants sans compte).
+model ParticipantPVSensibilisation {
+  id     String            @id @default(cuid())
+  pvId   String
+  pv     PVSensibilisation @relation(fields: [pvId], references: [id], onDelete: Cascade)
+  numero Int
+  nom    String
+  poste  String?
+  aSigne Boolean           @default(false)
+}
+
+enum TypeNotificationIncident {
+  ACCIDENT
+  INCIDENT
+  PRESQU_ACCIDENT
+}
+
+enum RoleImpliqueRapportIncident {
+  VICTIME
+  TEMOIN
+}
+
+enum TypePersonneImpliquee {
+  PERMANENT
+  OCCASIONNEL
+  COLLATERAL
+}
+
+/// Flux 6 — Rapport d'Incident/Accident/Presqu'accident, "sous 24h".
+/// Enregistrement direct, aucun circuit de validation propre (le délai de
+/// 24h est une attente de délai, pas une porte d'approbation).
+/// nonConformiteIdentifiee est un champ NOUVEAU, purement applicatif
+/// (aucune case à cocher équivalente fiable n'existe sur le formulaire
+/// papier réel — cf. CLAUDE.md) : déclenche
+/// creerOuReutiliserNonConformite() quand coché.
+model RapportIncident {
+  id     String @id @default(cuid())
+  numero Int    @unique @default(autoincrement())
+
+  dateEvenement         DateTime
+  projetId              String?
+  projet                Projet?  @relation(fields: [projetId], references: [id])
+  chantierLibre         String?
+  lieu                  String?
+  directionServiceLibre String?
+
+  reporteParId String
+  reportePar   Utilisateur @relation("UtilisateurReporteParRapportIncident", fields: [reporteParId], references: [id])
+
+  typeNotification TypeNotificationIncident
+
+  /// 19 items fixes + autre — cf. section A.1.
+  activite                          String[] @default([])
+  activiteAutrePrecision            String?
+  /// 11 items fixes + autre — cf. section A.2.
+  descriptionDommages               String[] @default([])
+  descriptionDommagesAutrePrecision String?
+
+  personnesImpliquees PersonneImpliqueeRapportIncident[]
+
+  resumeEvenement String
+
+  actionsImmediates ActionImmediateRapportIncident[]
+
+  /// Liste anatomique fixe (schéma corporel).
+  schemaCorporelPartiesAtteintes String[] @default([])
+  /// 11 items fixes.
+  typeBlessure                   String[] @default([])
+  descriptionBlessure            String?
+
+  /// 9 items fixes + autre.
+  dommagesEnvironnementaux               String[] @default([])
+  dommagesEnvironnementauxAutrePrecision String?
+  descriptionDommagesEnvironnementaux    String?
+
+  rapportPolice      Boolean   @default(false)
+  datePolice         DateTime?
+  postePolice        String?
+  rapportAssurance   Boolean   @default(false)
+  dateAssurance      DateTime?
+  referenceAssurance String?
+  rapportExpertise   Boolean   @default(false)
+  dateExpertise      DateTime?
+  referenceExpertise String?
+
+  dommagesBiensEquipementsDetails String?
+  fraisMedicauxCoutDommages       Decimal? @db.Decimal(14, 2)
+
+  photos PhotoRapportIncident[]
+
+  /// Jusqu'à 12 noms libres — pas nécessairement des Utilisateur.
+  equipeInvestigation String[] @default([])
+
+  /// Causes identifiées (5M + Divers), chacune une liste fixe.
+  causesMatiere    String[] @default([])
+  causesMethode    String[] @default([])
+  causesMainOeuvre String[] @default([])
+  causesMachine    String[] @default([])
+  causesMilieu     String[] @default([])
+  causesDivers     String[] @default([])
+
+  /// Analyse des causes racines (5M), texte libre.
+  analyseCausesMatiere    String?
+  analyseCausesMethode    String?
+  analyseCausesMainOeuvre String?
+  analyseCausesMachine    String?
+  analyseCausesMilieu     String?
+
+  corrections CorrectionRapportIncident[]
+
+  nonConformiteIdentifiee  Boolean        @default(false)
+  nonConformiteDescription String?
+  nonConformite            NonConformite?
+
+  creeParId String
+  creePar   Utilisateur @relation("UtilisateurCreeRapportIncident", fields: [creeParId], references: [id])
+
+  dateCreation DateTime @default(now())
+
+  @@index([projetId])
+  @@index([typeNotification])
+}
+
+model PersonneImpliqueeRapportIncident {
+  id                String                      @id @default(cuid())
+  rapportIncidentId String
+  rapportIncident   RapportIncident             @relation(fields: [rapportIncidentId], references: [id], onDelete: Cascade)
+  role              RoleImpliqueRapportIncident
+  nom               String
+  fonction          String?
+  /// Victimes uniquement.
+  typePersonne      TypePersonneImpliquee?
+}
+
+model ActionImmediateRapportIncident {
+  id                String          @id @default(cuid())
+  rapportIncidentId String
+  rapportIncident   RapportIncident @relation(fields: [rapportIncidentId], references: [id], onDelete: Cascade)
+  action            String
+  responsable       String
+  clotureLe         DateTime?
+}
+
+model CorrectionRapportIncident {
+  id                    String          @id @default(cuid())
+  rapportIncidentId     String
+  rapportIncident       RapportIncident @relation(fields: [rapportIncidentId], references: [id], onDelete: Cascade)
+  correction            String
+  responsable           String
+  echeance              DateTime?
+  ressourcesNecessaires String?
+  clotureLe             DateTime?
+}
+
+/// Bucket Storage privé "documents" (Lot 2), préfixe "qhse/rapport-incident/".
+model PhotoRapportIncident {
+  id                 String          @id @default(cuid())
+  rapportIncidentId  String
+  rapportIncident    RapportIncident @relation(fields: [rapportIncidentId], references: [id], onDelete: Cascade)
+  cheminFichier      String
+  nomFichierOriginal String
+  ajouteParId        String?
+  ajoutePar          Utilisateur?    @relation("UtilisateurAjoutePhotoRapportIncident", fields: [ajouteParId], references: [id])
+  dateAjout          DateTime        @default(now())
+}
+
+enum TypeNonConformite {
+  RECLAMATION
+  NON_RESPECT_EXIGENCE
+  AUDIT_EXTERNE
+  INSPECTION_VISUELLE
+  CONTROLE_QUALITE
+  INDICATEUR_NON_ATTEINT
+}
+
+enum StatutNonConformite {
+  OUVERTE
+  CLOTUREE
+}
+
+enum DecisionClotureNonConformite {
+  ACCEPTEE
+  REFUSEE
+  A_CONFIRMER_PROCHAINE_VERIFICATION
+}
+
+/// Flux 7 — point d'arrivée partagé de deux origines (idempotent via
+/// creerOuReutiliserNonConformite(), même principe que
+/// creerOuReutiliserDemandeReapprovisionnement(), Lot 6) ET créable
+/// manuellement (creerNonConformiteManuelle(), pas idempotente — pas de clé
+/// naturelle pour une saisie humaine directe, les deux FK d'origine restent
+/// null). Clôture gatée par un accès réel qhse/non-conformite
+/// (possedeAccesSousModule), jamais Fonction/niveauHierarchique. NULL n'est
+/// jamais égal à un autre NULL dans une contrainte unique Postgres : les
+/// deux @@unique ci-dessous (une par origine) sont donc totalement
+/// indépendantes, et n'entrent jamais en conflit avec les Non-Conformités
+/// créées manuellement (les deux colonnes restant null). Cf. CLAUDE.md.
+model NonConformite {
+  id   String   @id @default(cuid())
+  date DateTime @default(now())
+
+  identificateurId String
+  identificateur   Utilisateur @relation("UtilisateurIdentificateurNonConformite", fields: [identificateurId], references: [id])
+
+  typeNonConformite TypeNonConformite
+  processus         String?
+  normeDocReference String?
+  refExigence       String?
+
+  descriptionNonConformite String
+  preuveDescription        String?
+  photos                   PhotoNonConformite[]
+
+  correctionContenu         String?
+  correctionDelai           DateTime?
+  analyseCausesContenu      String?
+  analyseCausesDelai        DateTime?
+  actionsCorrectivesContenu String?
+  actionsCorrectivesDelai   DateTime?
+
+  dateAchevement          DateTime?
+  responsableMiseOeuvreId String?
+  responsableMiseOeuvre   Utilisateur? @relation("UtilisateurResponsableMiseOeuvreNonConformite", fields: [responsableMiseOeuvreId], references: [id])
+  dateSignatureMiseOeuvre DateTime?
+
+  statut            StatutNonConformite           @default(OUVERTE)
+  decisionCloture   DecisionClotureNonConformite?
+  responsableQHSEId String?
+  responsableQHSE   Utilisateur?                  @relation("UtilisateurResponsableQHSENonConformite", fields: [responsableQHSEId], references: [id])
+  dateCloture       DateTime?
+
+  reponsePointInspectionHSEId String?                    @unique
+  reponsePointInspectionHSE   ReponsePointInspectionHSE? @relation(fields: [reponsePointInspectionHSEId], references: [id])
+  rapportIncidentId           String?                    @unique
+  rapportIncident             RapportIncident?           @relation(fields: [rapportIncidentId], references: [id])
+
+  dateCreation     DateTime @default(now())
+  dateModification DateTime @updatedAt
+
+  @@index([statut])
+}
+
+/// Bucket Storage privé "documents" (Lot 2), préfixe "qhse/non-conformite/"
+/// — ajout au-delà du cadrage explicite (le champ "PREUVE" du formulaire
+/// réel mentionne explicitement "photo/document", et chaque autre fiche
+/// QHSE avec preuve photographique a déjà sa table dédiée — cohérence).
+model PhotoNonConformite {
+  id                 String        @id @default(cuid())
+  nonConformiteId    String
+  nonConformite      NonConformite @relation(fields: [nonConformiteId], references: [id], onDelete: Cascade)
+  cheminFichier      String
+  nomFichierOriginal String
+  ajouteParId        String?
+  ajoutePar          Utilisateur?  @relation("UtilisateurAjoutePhotoNonConformite", fields: [ajouteParId], references: [id])
+  dateAjout          DateTime      @default(now())
 }

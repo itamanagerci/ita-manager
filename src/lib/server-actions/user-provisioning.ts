@@ -27,6 +27,20 @@ export async function initialiserAccesDepuisFonction(
 }
 
 /**
+ * Lot 9 (QHSE, Flux 1) — crée automatiquement la fiche Accueil Sécurité à la
+ * création de TOUT compte Utilisateur, jamais manuellement. Doit être
+ * appelée depuis les DEUX chemins de création de compte
+ * (creerCompteUtilisateur() ET seedUtilisateursTest(), ce dernier ayant sa
+ * propre logique inline qui ne passe jamais par initialiserAccesDepuisFonction()
+ * — cf. CLAUDE.md). L'appelant doit toujours envelopper cet appel dans le
+ * même try/catch défensif que l'email de bienvenue : un échec d'écriture
+ * QHSE ne doit jamais bloquer la création de compte.
+ */
+export async function initialiserAccueilSecurite(utilisateurId: string): Promise<void> {
+  await prisma.accueilSecurite.create({ data: { utilisateurId } });
+}
+
+/**
  * Propage une évolution des modules par défaut d'une Fonction à tous ses
  * utilisateurs — SAUF ceux qui ont déjà posé une exception individuelle sur
  * ce sous-module précis (règle explicite du 0.4).

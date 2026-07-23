@@ -10,6 +10,7 @@ import { requireAccesModule } from "@/lib/server-actions/guards";
 import {
   changerFonctionUtilisateur,
   initialiserAccesDepuisFonction,
+  initialiserAccueilSecurite,
 } from "@/lib/server-actions/user-provisioning";
 import { genererMotDePasseTemporaire } from "@/lib/mot-de-passe-temporaire";
 import { creerCompteSchema, type CreerCompteInput } from "@/types/validations/utilisateur";
@@ -66,6 +67,12 @@ export async function creerCompteUtilisateur(
       creeParId: admin.id,
     },
   });
+
+  try {
+    await initialiserAccueilSecurite(utilisateur.id);
+  } catch (e) {
+    console.error("Création de la fiche Accueil Sécurité QHSE échouée :", e);
+  }
 
   await initialiserAccesDepuisFonction(utilisateur.id, donnees.fonctionId);
 
@@ -169,6 +176,26 @@ async function possedeDonneesLiees(utilisateurId: string): Promise<boolean> {
     validationsCodeUrgent,
     paiementsUrgentsBeneficies,
     paiementsUrgentsExecutes,
+    accueilSecurite,
+    accueilsSecuriteResponsable,
+    fichesASTChef,
+    fichesASTRelaisQHSE,
+    attributionsEPIBeneficiees,
+    attributionsEPIEffectuees,
+    inspectionsHSEResponsable,
+    inspectionsHSERelaisQHSE,
+    inspectionsHSEChefChantier,
+    photosInspectionHSEAjoutees,
+    rapportsHebdoQHSE,
+    programmesSensibilisationCrees,
+    pvSensibilisationVises,
+    rapportsIncidentReportes,
+    rapportsIncidentCrees,
+    photosRapportIncidentAjoutees,
+    nonConformitesIdentifiees,
+    nonConformitesResponsableMiseOeuvre,
+    nonConformitesResponsableQHSE,
+    photosNonConformiteAjoutees,
   ] = await Promise.all([
     prisma.historiqueStatut.count({ where: { acteurId: utilisateurId } }),
     prisma.demandeIndex.count({
@@ -234,6 +261,27 @@ async function possedeDonneesLiees(utilisateurId: string): Promise<boolean> {
     prisma.codeAutorisationPaiementUrgent.count({ where: { valideParId: utilisateurId } }),
     prisma.paiementUrgent.count({ where: { beneficiaireUtilisateurId: utilisateurId } }),
     prisma.paiementUrgent.count({ where: { executeParId: utilisateurId } }),
+    // Lot 9 (QHSE)
+    prisma.accueilSecurite.count({ where: { utilisateurId } }),
+    prisma.accueilSecurite.count({ where: { responsableAccueilId: utilisateurId } }),
+    prisma.ficheAST.count({ where: { chefChantierId: utilisateurId } }),
+    prisma.ficheAST.count({ where: { relaisQHSEId: utilisateurId } }),
+    prisma.attributionEPI.count({ where: { beneficiaireId: utilisateurId } }),
+    prisma.attributionEPI.count({ where: { effectueParId: utilisateurId } }),
+    prisma.inspectionHSE.count({ where: { responsableInspectionId: utilisateurId } }),
+    prisma.inspectionHSE.count({ where: { relaisQHSEId: utilisateurId } }),
+    prisma.inspectionHSE.count({ where: { chefChantierId: utilisateurId } }),
+    prisma.photoInspectionHSE.count({ where: { ajouteParId: utilisateurId } }),
+    prisma.rapportHebdoQHSE.count({ where: { relaisQHSEId: utilisateurId } }),
+    prisma.programmeSensibilisation.count({ where: { creeParId: utilisateurId } }),
+    prisma.pVSensibilisation.count({ where: { serviceQHSEVisaId: utilisateurId } }),
+    prisma.rapportIncident.count({ where: { reporteParId: utilisateurId } }),
+    prisma.rapportIncident.count({ where: { creeParId: utilisateurId } }),
+    prisma.photoRapportIncident.count({ where: { ajouteParId: utilisateurId } }),
+    prisma.nonConformite.count({ where: { identificateurId: utilisateurId } }),
+    prisma.nonConformite.count({ where: { responsableMiseOeuvreId: utilisateurId } }),
+    prisma.nonConformite.count({ where: { responsableQHSEId: utilisateurId } }),
+    prisma.photoNonConformite.count({ where: { ajouteParId: utilisateurId } }),
   ]);
 
   return (
@@ -286,7 +334,27 @@ async function possedeDonneesLiees(utilisateurId: string): Promise<boolean> {
     demandesCodeUrgent > 0 ||
     validationsCodeUrgent > 0 ||
     paiementsUrgentsBeneficies > 0 ||
-    paiementsUrgentsExecutes > 0
+    paiementsUrgentsExecutes > 0 ||
+    accueilSecurite > 0 ||
+    accueilsSecuriteResponsable > 0 ||
+    fichesASTChef > 0 ||
+    fichesASTRelaisQHSE > 0 ||
+    attributionsEPIBeneficiees > 0 ||
+    attributionsEPIEffectuees > 0 ||
+    inspectionsHSEResponsable > 0 ||
+    inspectionsHSERelaisQHSE > 0 ||
+    inspectionsHSEChefChantier > 0 ||
+    photosInspectionHSEAjoutees > 0 ||
+    rapportsHebdoQHSE > 0 ||
+    programmesSensibilisationCrees > 0 ||
+    pvSensibilisationVises > 0 ||
+    rapportsIncidentReportes > 0 ||
+    rapportsIncidentCrees > 0 ||
+    photosRapportIncidentAjoutees > 0 ||
+    nonConformitesIdentifiees > 0 ||
+    nonConformitesResponsableMiseOeuvre > 0 ||
+    nonConformitesResponsableQHSE > 0 ||
+    photosNonConformiteAjoutees > 0
   );
 }
 

@@ -573,6 +573,46 @@ async function seedFonctions() {
     });
   }
 
+  // Fonction Responsable QHSE (Lot 9) : accès aux 9 sous-modules qhse.
+  // "Assistant QHSE"/"Relais QHSE" (organigramme) ne sont pas des Fonctions
+  // séparées — même précédent que Responsable Service Logistique/Chef de
+  // Magasin (Lot 6) bundlant plusieurs rôles documentaires en une seule
+  // Fonction réelle d'accès. Cf. CLAUDE.md.
+  const qhseFonction = await prisma.fonction.upsert({
+    where: { nom: "Responsable QHSE" },
+    update: {},
+    create: {
+      nom: "Responsable QHSE",
+      description: "Sécurité, hygiène, environnement — inspections, non-conformités, sensibilisation",
+    },
+  });
+  const sousModulesQhse = await prisma.sousModule.findMany({
+    where: {
+      code: {
+        in: [
+          "accueil-securite",
+          "ast",
+          "stock-epi",
+          "inspection-hse",
+          "rapport-hebdo",
+          "programme-sensibilisation",
+          "pv-sensibilisation",
+          "rapport-incident",
+          "non-conformite",
+        ],
+      },
+    },
+  });
+  for (const sousModule of sousModulesQhse) {
+    await prisma.fonctionModuleDefaut.upsert({
+      where: {
+        fonctionId_sousModuleId: { fonctionId: qhseFonction.id, sousModuleId: sousModule.id },
+      },
+      update: {},
+      create: { fonctionId: qhseFonction.id, sousModuleId: sousModule.id, activeParDefaut: true },
+    });
+  }
+
   return {
     rhFonction,
     chefChantierFonction,
@@ -583,6 +623,7 @@ async function seedFonctions() {
     chefMagasinFonction,
     achatFonction,
     dfcFonction,
+    qhseFonction,
   };
 }
 
@@ -596,6 +637,7 @@ async function seedUtilisateursTest(fonctions: {
   chefMagasinFonction: { id: string };
   achatFonction: { id: string };
   dfcFonction: { id: string };
+  qhseFonction: { id: string };
 }) {
   const admin = createAdminClient();
 
@@ -670,6 +712,13 @@ async function seedUtilisateursTest(fonctions: {
       niveauHierarchique: "DIRECTEUR" as const,
       fonctionId: fonctions.dfcFonction.id,
     },
+    {
+      email: "qhse.test@itamanager.cloud",
+      nom: "Bamba",
+      prenom: "Aïcha",
+      niveauHierarchique: "CHEF_SERVICE" as const,
+      fonctionId: fonctions.qhseFonction.id,
+    },
   ];
 
   for (const compte of comptesTest) {
@@ -697,6 +746,16 @@ async function seedUtilisateursTest(fonctions: {
         fonctionId: compte.fonctionId,
       },
     });
+
+    // Lot 9 (QHSE, Flux 1) — même déclencheur que creerCompteUtilisateur(),
+    // dupliqué ici en ligne : ce fichier ne peut pas importer
+    // user-provisioning.ts (import "server-only"), même limitation déjà
+    // documentée pour propagerModificationFonction(). Cf. CLAUDE.md.
+    try {
+      await prisma.accueilSecurite.create({ data: { utilisateurId: utilisateur.id } });
+    } catch (e) {
+      console.error(`Création de la fiche Accueil Sécurité QHSE échouée pour ${compte.email} :`, e);
+    }
 
     const defauts = await prisma.fonctionModuleDefaut.findMany({
       where: { fonctionId: compte.fonctionId },
@@ -1045,6 +1104,51 @@ async function seedPointsInspection() {
   }
 }
 
+/// Lot 9 (QHSE) — 26 points réels de la Fiche d'Inspection HSE, contenu
+/// intégral du document "Workflow_QHSE_ITA_COMPLET_v2" fourni par
+/// l'utilisateur (pas un placeholder, contrairement aux points véhicule/
+/// engin ci-dessus) — Base vie ×8, Poste de travail ×5, Sensibilisation &
+/// EPI ×9, Personnel chantier ×2, Gestion déchets ×2.
+async function seedPointsInspectionHSE() {
+  const pointsHSE = [
+    "La base vie est-elle bien entretenue ?",
+    "L'intérieur des conteneurs est bien rangé ?",
+    "Il y a-t-il un tableau d'affichage ?",
+    "Le passage piéton est-il défini et bien entretenu ?",
+    "Les toilettes sont-elles propres ?",
+    "Les zones de stockage sont-elles définies, balisées et bien entretenues ?",
+    "Existe-t-il des panneaux qui indiquent les installations de la base vie ?",
+    "Existe-t-il un point de rassemblement ?",
+    "Les ateliers sont-ils bien délimités ?",
+    "Les ateliers sont-ils propres et bien rangés ?",
+    "Existe-t-il une poubelle à proximité des ateliers ?",
+    "Le matériel est bien rangé et balisé sur les zones de travail ?",
+    "Les zones dangereuses sont-elles identifiées et balisées ?",
+    "Les quarts d'heure de sécurité sont-ils tenus régulièrement ?",
+    "Les messages de sensibilisation sont-ils respectés par les travailleurs ?",
+    "Les travailleurs s'intéressent-ils aux sensibilisations ?",
+    "Les comptes rendus des sensibilisations sont-ils renseignés ?",
+    "Le port des EPI est-il respecté sur le chantier ?",
+    "Les EPI sont-ils bien gérés par les travailleurs et le relais QHSE ?",
+    "Les fiches de gestion des EPI sont-elles bien renseignées ?",
+    "Les EPI usés sont-ils récupérés avant renouvellement ?",
+    "Les travailleurs sont informés de la procédure d'évacuation ?",
+    "Le cahier de présence est-il bien renseigné ?",
+    "Les travailleurs sont ponctuels au travail ?",
+    "Existe-t-il une zone à déchets et des poubelles ?",
+    "Le tri des déchets est-il respecté sur le chantier ?",
+  ];
+
+  for (const [ordre, libelle] of pointsHSE.entries()) {
+    const code = `PT_HSE_${ordre + 1}`;
+    await prisma.pointInspection.upsert({
+      where: { code },
+      update: { libelle, categorie: "HSE" },
+      create: { code, libelle, categorie: "HSE", ordre },
+    });
+  }
+}
+
 /// Lot 7 — référentiel de configuration à une seule ligne (table plutôt
 /// qu'enum, même philosophie que CategorieMateriel/UniteMesure). Seuil
 /// placeholder — aucun chiffre métier réel n'a été fourni.
@@ -1093,6 +1197,7 @@ async function main() {
   await seedParametresAchat();
   await seedFournisseursTest();
   await seedNumeroWaveTest();
+  await seedPointsInspectionHSE();
 }
 
 main()
