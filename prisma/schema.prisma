@@ -170,6 +170,16 @@ model Utilisateur {
   demandesBonSortieTransfert      BonSortieTransfert[]          @relation("UtilisateurDemandeurBonSortieTransfert")
   expeditionsBonSortieTransfert   BonSortieTransfert[]          @relation("UtilisateurExpediteurBonSortieTransfert")
   responsabiliteSortieTransfert   BonSortieTransfert[]          @relation("UtilisateurResponsableSortieBonSortieTransfert")
+
+  demandesAchatDemandeur     DemandeAchat[]           @relation("UtilisateurDemandeurAchat")
+  demandesAchatEmetteur      DemandeAchat[]           @relation("UtilisateurEmetteurAchat")
+  demandesAchatCreees        DemandeAchat[]           @relation("UtilisateurCreateurAchat")
+  demandesAchatDirecteur     DemandeAchat[]           @relation("UtilisateurDirecteurAchat")
+  demandesAchatTraitees      DemandeAchat[]           @relation("UtilisateurTraitantAchat")
+  validationsAchatEffectuees ValidationDemandeAchat[]
+  bonsCommandeEnvoyes        BonDeCommande[]
+  piecesJointesDevisAjoutees PieceJointeDevis[]
+  parametresAchatModifies    ParametresAchat[]
 }
 
 /// Droits d'accès individuels. Initialisés depuis FonctionModuleDefaut à la création
@@ -628,6 +638,13 @@ model Projet {
   demandesMateriel DemandeMateriel[]
   relevesActivite  ReleveActivite[]
 
+  /// Lot 7 (Achat) : deux relations distinctes, jamais confondues — une
+  /// demande peut concerner un chantier (forType=CHANTIER, projetId) tout
+  /// en étant livrée sur un AUTRE chantier (lieuLivraisonProjetId). Cf.
+  /// CLAUDE.md.
+  demandesAchatChantier  DemandeAchat[] @relation("DemandeAchatChantier")
+  demandesAchatLivraison DemandeAchat[] @relation("DemandeAchatLieuLivraison")
+
   @@index([chefProjetId])
 }
 
@@ -847,6 +864,12 @@ model Article {
   creePar   Utilisateur? @relation(fields: [creeParId], references: [id])
 
   dateCreation DateTime @default(now())
+
+  /// Lot 7 (Achat) : deuxième chemin d'écriture indépendant vers
+  /// fournisseur/prix, via mettreAJourArticleFournisseurPrix() — jamais via
+  /// creerArticle() (Lot 5, direction-technique/liste-articles), qui ne
+  /// renseigne jamais que designation/creeParId. Cf. CLAUDE.md.
+  lignesDemandeAchat LigneDemandeAchat[]
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -1077,6 +1100,13 @@ model BonEntreeMagasin {
 
   demandeReapprovisionnementId String?
   demandeReapprovisionnement   DemandeReapprovisionnement? @relation(fields: [demandeReapprovisionnementId], references: [id])
+
+  /// Lot 7 (Achat) : trace optionnelle vers le Bon de Commande à l'origine
+  /// de cette livraison — même forme/nullabilité que
+  /// demandeReapprovisionnementId ci-dessus, aucun autre changement au
+  /// circuit BEM du Lot 6. Cf. CLAUDE.md.
+  bonDeCommandeId String?
+  bonDeCommande   BonDeCommande? @relation(fields: [bonDeCommandeId], references: [id])
 
   bonLivraisonFournisseurNumero String
   dateReception                 DateTime
@@ -1574,4 +1604,287 @@ model LigneBonSortieTransfert {
   quantite    Int
   etat        String?
   observation String?
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Lot 7 — Service Achat. Le circuit le plus complexe du projet : l'étape de
+// validation standard est PARALLÈLE (le Responsable Achat sélectionne
+// dynamiquement un sous-ensemble de DT/RH/DFC/DG qui doivent TOUS valider ;
+// un seul refus bloque tout), contrairement à tous les circuits précédents
+// (séquentiels, un validateur/rôle à la fois). DemandeIndex ne représentant
+// nativement qu'UNE cible de routage à la fois, ValidationDemandeAchat est
+// une table de suivi dédiée au grain "rôle" (même principe que
+// LigneDemandeRHProjet au grain "ligne", Lot 5) — cf. CLAUDE.md pour le
+// raisonnement complet, y compris le sentinel enAttenteValidationDe et la
+// mécanique d'unicité partielle de BonDeCommande.
+// ─────────────────────────────────────────────────────────────────────────
+
+enum ForTypeDemandeAchat {
+  SERVICE
+  CHANTIER
+}
+
+/// Classification pure pour ce lot — aucune branche du circuit ne dépend de
+/// cette valeur (choix de scope minimal délibéré, cf. CLAUDE.md).
+enum TypeDemandeAchat {
+  INITIALE
+  REGULARISATION
+}
+
+enum StatutDemandeAchat {
+  EN_ATTENTE_DIRECTEUR
+  EN_ATTENTE_TRAITEMENT_ACHAT
+  EN_ATTENTE_VALIDATION_PARALLELE
+  REFUSEE
+  BC_EMIS
+}
+
+/// Détermine où reprend le circuit après un refus et resoumission — cf.
+/// CLAUDE.md (un refus Directeur renvoie à l'étape 2, rien à refaire côté
+/// Achat ; un refus d'un validateur parallèle renvoie à l'étape 3, les
+/// termes fixés par Achat sont ce qui a pu changer).
+enum EtapeBlocageDemandeAchat {
+  DIRECTEUR
+  VALIDATION_PARALLELE
+}
+
+enum TypePaiementAchat {
+  CHEQUE
+  VIREMENT
+  ESPECES
+  MOBILE_MONEY
+}
+
+enum ModeTarificationLigneAchat {
+  FORFAITAIRE
+  CALCULE
+}
+
+enum RoleValidationAchat {
+  DT
+  RH
+  DFC
+  DG
+}
+
+enum StatutValidationDemandeAchat {
+  EN_ATTENTE
+  VALIDEE
+  REFUSEE
+}
+
+enum StatutBonDeCommande {
+  OUVERT
+  ENVOYE
+}
+
+/// Circuit : 1) demandeur sélectionne des Article (désignation seule, prix
+/// masqué côté serveur) ou saisit une désignation libre ; 2) validation du
+/// Directeur du département (directeurDepartementId, figé depuis
+/// demandeur.superieurId — même pattern que DemandeAbsence, Lot 4) ; 3) le
+/// Responsable Achat traite (prix/fournisseur/devis/termes de paiement,
+/// urgent ou sélection de validateurs) ; 4) validation parallèle
+/// (ValidationDemandeAchat) si non urgent ; 5) Bon de Commande émis, groupé
+/// par fournisseur (BonDeCommande) ; 6) réception via BonEntreeMagasin (Lot
+/// 6, lien bonDeCommandeId) ; 7) facturation/paiement — Lot 8 (DFC), hors
+/// scope, BC_EMIS est un état terminal pour ce lot côté DemandeIndex. Cf.
+/// CLAUDE.md.
+model DemandeAchat {
+  id     String @id @default(cuid())
+  numero Int    @unique @default(autoincrement())
+
+  forType              ForTypeDemandeAchat
+  /// Code Module libre (ex: "rh", "logistique") si forType=SERVICE — jamais
+  /// une FK, même convention que DemandeIndex.typeModule. Cf. CLAUDE.md.
+  forServiceModuleCode String?
+  projetId             String?
+  projet               Projet?             @relation("DemandeAchatChantier", fields: [projetId], references: [id])
+  chantierLibre        String?
+
+  /// Dimension séparée de forType/for*Id ci-dessus : le lieu de LIVRAISON
+  /// physique peut différer de l'entité pour laquelle la demande est faite
+  /// (ex: demande POUR le service RH, livrée SUR un chantier). Même paire
+  /// FK-nullable+texte-libre que DemandeMateriel (Lot 5).
+  lieuLivraisonProjetId  String?
+  lieuLivraisonProjet    Projet?  @relation("DemandeAchatLieuLivraison", fields: [lieuLivraisonProjetId], references: [id])
+  lieuLivraisonLibre     String?
+  dateLivraisonSouhaitee DateTime
+
+  type TypeDemandeAchat @default(INITIALE)
+
+  /// Trois acteurs distincts, jamais fusionnés : demandeurId (bénéficiaire
+  /// réel, pilote directeurDepartementId), emetteurId (porteur/responsable
+  /// budgétaire, souvent = demandeurId), creeParId (qui a rempli le
+  /// formulaire, peut différer des deux). Cf. CLAUDE.md.
+  demandeurId String
+  demandeur   Utilisateur @relation("UtilisateurDemandeurAchat", fields: [demandeurId], references: [id])
+  emetteurId  String
+  emetteur    Utilisateur @relation("UtilisateurEmetteurAchat", fields: [emetteurId], references: [id])
+  creeParId   String
+  creePar     Utilisateur @relation("UtilisateurCreateurAchat", fields: [creeParId], references: [id])
+
+  justification String
+
+  statut       StatutDemandeAchat        @default(EN_ATTENTE_DIRECTEUR)
+  motifRefus   String?
+  etapeBlocage EtapeBlocageDemandeAchat?
+
+  /// Figé depuis demandeur.superieurId à la création — même pattern que
+  /// DemandeAbsence.superieurId (Lot 4). Re-figé à chaque resoumission après
+  /// un refus du Directeur (le supérieur a pu changer entretemps).
+  directeurDepartementId  String
+  directeurDepartement    Utilisateur @relation("UtilisateurDirecteurAchat", fields: [directeurDepartementId], references: [id])
+  dateValidationDirecteur DateTime?
+
+  // Étape 3 — traitement Responsable Achat
+  traiteParId           String?
+  traitePar             Utilisateur?       @relation("UtilisateurTraitantAchat", fields: [traiteParId], references: [id])
+  dateTraitement        DateTime?
+  dateLivraisonPrevue   DateTime?
+  tauxTva               Decimal?           @db.Decimal(5, 2)
+  typePaiement          TypePaiementAchat?
+  /// 30 ou 60 jours.
+  echeancePaiementJours Int?
+  montantTotalTTC       Decimal?           @db.Decimal(14, 2)
+  urgent                Boolean            @default(false)
+  /// ParametresAchat.seuilUrgence figé au moment de la décision "urgent" —
+  /// jamais recalculé ensuite, même principe d'audit-freeze que
+  /// DemandeCarburant.cumulMensuelAvant (Lot 3).
+  seuilUrgenceApplique  Decimal?           @db.Decimal(14, 2)
+
+  lignes             LigneDemandeAchat[]
+  validations        ValidationDemandeAchat[]
+  piecesJointesDevis PieceJointeDevis[]
+
+  dateCreation     DateTime @default(now())
+  dateModification DateTime @updatedAt
+
+  @@index([statut])
+  @@index([demandeurId])
+  @@index([directeurDepartementId, statut])
+}
+
+model LigneDemandeAchat {
+  id        String       @id @default(cuid())
+  demandeId String
+  demande   DemandeAchat @relation(fields: [demandeId], references: [id], onDelete: Cascade)
+
+  /// Choix référencé (Bordereau/Article, désignation seule visible au
+  /// demandeur) OU saisie libre non référencée — jamais les deux.
+  articleId        String?
+  article          Article? @relation(fields: [articleId], references: [id])
+  designationLibre String?
+  quantite         Int
+
+  // Renseigné par le Responsable Achat à l'étape 3 — jamais visible au
+  // demandeur avant traitement.
+  fournisseur        String?
+  modeTarification   ModeTarificationLigneAchat?
+  prixUnitaire       Decimal?                    @db.Decimal(14, 2)
+  montantForfaitaire Decimal?                    @db.Decimal(14, 2)
+  /// = montantForfaitaire OU prixUnitaire*quantite, stocké — jamais recalculé
+  /// à la lecture.
+  montantLigneHT     Decimal?                    @db.Decimal(14, 2)
+
+  ligneBC LigneBonDeCommande?
+
+  @@index([demandeId])
+  @@index([articleId])
+}
+
+/// Table dédiée au grain "rôle sélectionné", jamais "personne nommée" — cf.
+/// décision confirmée : diffusion par rôle, comme tous les autres circuits
+/// de diffusion de ce projet (DG, RH). Une ligne par rôle choisi par le
+/// Responsable Achat pour CETTE demande (sous-ensemble de DT/RH/DFC/DG) ;
+/// le premier utilisateur habilité pour ce rôle qui agit remporte le
+/// créneau (garde atomique via updateMany, même idiome que les décréments
+/// de stock). @@unique([demandeId, role]) empêche un doublon de rôle. Cf.
+/// CLAUDE.md pour recalculerStatutDemandeAchat() et la remise à zéro
+/// complète en cas de resoumission après refus.
+model ValidationDemandeAchat {
+  id          String                       @id @default(cuid())
+  demandeId   String
+  demande     DemandeAchat                 @relation(fields: [demandeId], references: [id], onDelete: Cascade)
+  role        RoleValidationAchat
+  statut      StatutValidationDemandeAchat @default(EN_ATTENTE)
+  motifRefus  String?
+  valideParId String?
+  validePar   Utilisateur?                 @relation(fields: [valideParId], references: [id])
+  dateAction  DateTime?
+
+  @@unique([demandeId, role])
+  @@index([demandeId])
+  @@index([role, statut])
+}
+
+/// "Un BC ouvert par fournisseur à la fois", résolu sans index partiel SQL
+/// manuel : ouvertMarqueur ne vaut true que tant que statut=OUVERT, remis à
+/// null (jamais false) dès "Envoyé". Postgres traitant NULL comme toujours
+/// distinct dans une contrainte unique — le même fait dont
+/// DemandeIndex.enAttenteValidationDe/UtilisateurId dépend déjà pour son
+/// propre signal binaire — @@unique([fournisseur, ouvertMarqueur]) n'exclut
+/// donc que les doublons OUVERT pour un même fournisseur ; un nombre
+/// illimité de BC ENVOYE peut coexister pour le même fournisseur. Cf.
+/// CLAUDE.md.
+model BonDeCommande {
+  id          String              @id @default(cuid())
+  numero      Int                 @unique @default(autoincrement())
+  fournisseur String
+  statut      StatutBonDeCommande @default(OUVERT)
+
+  ouvertMarqueur Boolean?
+
+  envoyeParId String?
+  envoyePar   Utilisateur? @relation(fields: [envoyeParId], references: [id])
+  dateEnvoi   DateTime?
+
+  lignes            LigneBonDeCommande[]
+  bonsEntreeMagasin BonEntreeMagasin[]
+
+  dateCreation DateTime @default(now())
+
+  @@unique([fournisseur, ouvertMarqueur])
+  @@index([statut])
+}
+
+model LigneBonDeCommande {
+  id                  String            @id @default(cuid())
+  bonDeCommandeId     String
+  bonDeCommande       BonDeCommande     @relation(fields: [bonDeCommandeId], references: [id], onDelete: Cascade)
+  ligneDemandeAchatId String            @unique
+  ligneDemandeAchat   LigneDemandeAchat @relation(fields: [ligneDemandeAchatId], references: [id])
+  quantite            Int
+  prixUnitaire        Decimal           @db.Decimal(14, 2)
+  montantLigneTTC     Decimal           @db.Decimal(14, 2)
+
+  @@index([bonDeCommandeId])
+}
+
+/// Réutilise le bucket Storage privé "documents" du Lot 2 (préfixe
+/// "achat/devis/"), même pattern que PieceJointeAppelOffres (Lot 5) — pas de
+/// nouvelle infrastructure. Cf. CLAUDE.md.
+model PieceJointeDevis {
+  id                 String       @id @default(cuid())
+  demandeId          String
+  demande            DemandeAchat @relation(fields: [demandeId], references: [id], onDelete: Cascade)
+  cheminFichier      String
+  nomFichierOriginal String
+
+  ajouteParId String?
+  ajoutePar   Utilisateur? @relation(fields: [ajouteParId], references: [id])
+
+  dateAjout DateTime @default(now())
+}
+
+/// Référentiel de configuration à une seule ligne — même philosophie "table
+/// plutôt qu'enum" que CategorieMateriel/UniteMesure, corrigeable via
+/// pnpm db:seed sans migration. obtenirParametresAchat() fait un
+/// findFirst() ?? create() défensif même si le seed crée toujours une ligne.
+model ParametresAchat {
+  id           String  @id @default(cuid())
+  seuilUrgence Decimal @db.Decimal(14, 2)
+
+  modifieParId     String?
+  modifiePar       Utilisateur? @relation(fields: [modifieParId], references: [id])
+  dateModification DateTime     @updatedAt
 }

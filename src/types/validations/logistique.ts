@@ -94,6 +94,8 @@ export const creerBonEntreeMagasinSchema = z.object({
   magasinId: z.string().min(1, "Le magasin est requis"),
   fournisseur: z.string().min(1, "Le fournisseur est requis"),
   demandeReapprovisionnementId: z.string().optional(),
+  // Lot 7 (Achat) : trace optionnelle vers le BC à l'origine de la livraison.
+  bonDeCommandeId: z.string().optional(),
   lignes: z.array(ligneBEMSchema).min(1, "Au moins une ligne est requise"),
 });
 export type CreerBonEntreeMagasinInput = z.infer<typeof creerBonEntreeMagasinSchema>;

@@ -3,6 +3,7 @@ import {
   listerAValiderBEM,
 } from "@/lib/server-actions/flux-entree";
 import { listerMagasins } from "@/lib/server-actions/fiche-inventaire";
+import { listerBonsDeCommandePourReception } from "@/lib/server-actions/achat-bons-commande";
 import { getCurrentUtilisateur, possedeAccesSousModule } from "@/lib/server-actions/acces";
 import { requireAccesModule } from "@/lib/server-actions/guards";
 import { redirect } from "next/navigation";
@@ -32,7 +33,7 @@ export default async function FluxEntreePage() {
 
   const peutValider = await possedeAccesSousModule(utilisateur.id, "logistique", "magasins");
 
-  const [bons, aValider, magasins, materiels] = await Promise.all([
+  const [bons, aValider, magasins, materiels, bonsDeCommande] = await Promise.all([
     listerBonsEntreeMagasin(),
     listerAValiderBEM(),
     listerMagasins(),
@@ -41,6 +42,7 @@ export default async function FluxEntreePage() {
       select: { id: true, designation: true },
       orderBy: { designation: "asc" },
     }),
+    listerBonsDeCommandePourReception(),
   ]);
 
   return (
@@ -48,7 +50,9 @@ export default async function FluxEntreePage() {
       <PageHeader
         title="Flux Entrée Stock"
         description="Bon d'Entrée Magasin (BEM) — la validation met à jour la fiche inventaire."
-        actions={<BonEntreeForm magasins={magasins} materiels={materiels} />}
+        actions={
+          <BonEntreeForm magasins={magasins} materiels={materiels} bonsDeCommande={bonsDeCommande} />
+        }
       />
 
       {peutValider && (
@@ -107,6 +111,7 @@ export default async function FluxEntreePage() {
                   <TableHead>Magasin</TableHead>
                   <TableHead>Fournisseur</TableHead>
                   <TableHead>Articles</TableHead>
+                  <TableHead>BC d&apos;origine</TableHead>
                   <TableHead>Statut</TableHead>
                   <TableHead>Date</TableHead>
                 </TableRow>
@@ -120,6 +125,9 @@ export default async function FluxEntreePage() {
                     <TableCell>{bem.magasin.code}</TableCell>
                     <TableCell>{bem.fournisseur}</TableCell>
                     <TableCell>{bem.lignes.map((l) => l.materiel.designation).join(", ")}</TableCell>
+                    <TableCell>
+                      {bem.bonDeCommande ? `BC-${String(bem.bonDeCommande.numero).padStart(5, "0")}` : "—"}
+                    </TableCell>
                     <TableCell>
                       <StatutBadge
                         label={LABEL_STATUT[bem.statut]}

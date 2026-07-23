@@ -27,11 +27,13 @@ import {
 interface BonEntreeFormProps {
   magasins: { id: string; code: string; nom: string }[];
   materiels: { id: string; designation: string }[];
+  /** Lot 7 (Achat) : BC "Envoyé" proposés en trace optionnelle. */
+  bonsDeCommande?: { id: string; numero: number; fournisseur: string }[];
 }
 
 const LIGNE_VIDE = { materielId: "", quantiteRecue: 1 };
 
-export function BonEntreeForm({ magasins, materiels }: BonEntreeFormProps) {
+export function BonEntreeForm({ magasins, materiels, bonsDeCommande = [] }: BonEntreeFormProps) {
   const router = useRouter();
   const notifier = useNotifier();
   const [dialogOuvert, setDialogOuvert] = useState(false);
@@ -122,6 +124,19 @@ export function BonEntreeForm({ magasins, materiels }: BonEntreeFormProps) {
               <Input id="fournisseur" {...register("fournisseur")} />
             </FormField>
           </div>
+
+          {bonsDeCommande.length > 0 && (
+            <FormField label="Bon de Commande d'origine (optionnel)" htmlFor="bonDeCommandeId">
+              <NativeSelect id="bonDeCommandeId" {...register("bonDeCommandeId")}>
+                <option value="">Aucun</option>
+                {bonsDeCommande.map((bc) => (
+                  <option key={bc.id} value={bc.id}>
+                    BC-{String(bc.numero).padStart(5, "0")} — {bc.fournisseur}
+                  </option>
+                ))}
+              </NativeSelect>
+            </FormField>
+          )}
 
           <Separator />
 

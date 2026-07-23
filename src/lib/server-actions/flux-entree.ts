@@ -70,6 +70,7 @@ export async function creerBonEntreeMagasin(
   const bem = await prisma.bonEntreeMagasin.create({
     data: {
       demandeReapprovisionnementId: donnees.demandeReapprovisionnementId || null,
+      bonDeCommandeId: donnees.bonDeCommandeId || null,
       bonLivraisonFournisseurNumero: donnees.bonLivraisonFournisseurNumero,
       dateReception: new Date(donnees.dateReception),
       magasinId: donnees.magasinId,
@@ -192,6 +193,7 @@ export async function listerBonsEntreeMagasin() {
       magasin: true,
       receptionnePar: { select: { nom: true, prenom: true } },
       lignes: { include: { materiel: { select: { designation: true } } } },
+      bonDeCommande: { select: { numero: true } },
     },
     orderBy: { dateCreation: "desc" },
   });

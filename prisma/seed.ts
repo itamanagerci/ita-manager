@@ -94,10 +94,20 @@ const referentielModules: ModuleSeed[] = [
     ],
   },
   {
+    // Lot 7 : "acces" retiré inertement (actif: false, comme "pointage"),
+    // pas supprimé — évite d'orpheliner la ligne AccesUtilisateur que le
+    // catch-all "Responsable RH" référence déjà. Remplacé par les 4 vrais
+    // sous-modules du circuit. Cf. CLAUDE.md.
     code: "achat",
     nom: "Service Achat",
     icone: "ShoppingCart",
-    sousModules: [{ code: "acces", nom: "Service Achat" }],
+    sousModules: [
+      { code: "acces", nom: "Service Achat", actif: false },
+      { code: "demande-achat", nom: "Demande d'achat" },
+      { code: "traitement-achat", nom: "Traitement des demandes d'achat" },
+      { code: "validations-parallele", nom: "Validations parallèles" },
+      { code: "suivi-demandes", nom: "Suivi des demandes" },
+    ],
   },
   {
     code: "logistique",
@@ -287,6 +297,8 @@ async function seedFonctions() {
     // Lot 6, Livraison B — même persona demandeur pour Demande de
     // Transport (déjà présent) et Bon de Sortie et Transfert (nouveau).
     "bon-sortie",
+    // Lot 7 — persona demandeur Achat réaliste.
+    "demande-achat",
   ];
   const sousModulesChefChantier = await prisma.sousModule.findMany({
     where: { code: { in: codesChefChantier } },
@@ -317,7 +329,20 @@ async function seedFonctions() {
     create: { nom: "Direction Générale", description: "Pilotage et validations transverses" },
   });
   const sousModulesDg = await prisma.sousModule.findMany({
-    where: { code: { in: ["validations-centralisees", "suivi", "kpi", "gestion-comptes-acces"] } },
+    where: {
+      code: {
+        in: [
+          "validations-centralisees",
+          "suivi",
+          "kpi",
+          "gestion-comptes-acces",
+          // Lot 7 — octroi déclaratif explicite (pas un cas particulier dans
+          // getModulesAccessibles()) : DG est l'un des rôles éligibles à la
+          // validation parallèle Achat.
+          "validations-parallele",
+        ],
+      },
+    },
   });
   for (const sousModule of sousModulesDg) {
     await prisma.fonctionModuleDefaut.upsert({
@@ -384,6 +409,9 @@ async function seedFonctions() {
           "demande-rh-projet",
           "demande-logistique",
           "liste-articles",
+          // Lot 7 — octroi déclaratif explicite : DT est l'un des rôles
+          // éligibles à la validation parallèle Achat.
+          "validations-parallele",
         ],
       },
     },
@@ -495,6 +523,56 @@ async function seedFonctions() {
     });
   }
 
+  // Fonction Responsable Achat (Lot 7) : traite les demandes validées par le
+  // Directeur (prix/fournisseur/devis/termes, urgence, sélection des
+  // validateurs) — PAS "validations-parallele" (Achat désigne les
+  // validateurs, n'en est pas un). Cf. CLAUDE.md.
+  const achatFonction = await prisma.fonction.upsert({
+    where: { nom: "Responsable Achat" },
+    update: {},
+    create: {
+      nom: "Responsable Achat",
+      description: "Traitement des demandes d'achat, émission des Bons de Commande",
+    },
+  });
+  const sousModulesAchat = await prisma.sousModule.findMany({
+    where: { code: { in: ["demande-achat", "traitement-achat", "suivi-demandes"] } },
+  });
+  for (const sousModule of sousModulesAchat) {
+    await prisma.fonctionModuleDefaut.upsert({
+      where: {
+        fonctionId_sousModuleId: { fonctionId: achatFonction.id, sousModuleId: sousModule.id },
+      },
+      update: {},
+      create: { fonctionId: achatFonction.id, sousModuleId: sousModule.id, activeParDefaut: true },
+    });
+  }
+
+  // Fonction Responsable DFC (Lot 7) : aucune Fonction dédiée n'accédait
+  // jusqu'ici réellement au module "dfc" (seul le catch-all "Responsable
+  // RH" l'incluait incidemment) — nécessaire pour un persona DFC réaliste
+  // côté validation parallèle Achat.
+  const dfcFonction = await prisma.fonction.upsert({
+    where: { nom: "Responsable DFC" },
+    update: {},
+    create: {
+      nom: "Responsable DFC",
+      description: "Finances et Comptabilité — paiements, validation Achat (DFC)",
+    },
+  });
+  const sousModulesDfc = await prisma.sousModule.findMany({
+    where: { code: { in: ["paiement-standard", "paiement-urgent-wave", "validations-parallele"] } },
+  });
+  for (const sousModule of sousModulesDfc) {
+    await prisma.fonctionModuleDefaut.upsert({
+      where: {
+        fonctionId_sousModuleId: { fonctionId: dfcFonction.id, sousModuleId: sousModule.id },
+      },
+      update: {},
+      create: { fonctionId: dfcFonction.id, sousModuleId: sousModule.id, activeParDefaut: true },
+    });
+  }
+
   return {
     rhFonction,
     chefChantierFonction,
@@ -503,6 +581,8 @@ async function seedFonctions() {
     directionTechniqueFonction,
     responsableServiceLogistiqueFonction,
     chefMagasinFonction,
+    achatFonction,
+    dfcFonction,
   };
 }
 
@@ -514,6 +594,8 @@ async function seedUtilisateursTest(fonctions: {
   directionTechniqueFonction: { id: string };
   responsableServiceLogistiqueFonction: { id: string };
   chefMagasinFonction: { id: string };
+  achatFonction: { id: string };
+  dfcFonction: { id: string };
 }) {
   const admin = createAdminClient();
 
@@ -571,6 +653,22 @@ async function seedUtilisateursTest(fonctions: {
       // Assigné responsable de MAG-01 après création (cf. boucle ci-dessous)
       // — rend le circuit DMS→BSM testable de bout en bout.
       magasinResponsableCode: "MAG-01",
+    },
+    {
+      email: "achat.test@itamanager.cloud",
+      nom: "Koné",
+      prenom: "Salimata",
+      niveauHierarchique: "CHEF_SERVICE" as const,
+      fonctionId: fonctions.achatFonction.id,
+    },
+    {
+      email: "dfc.test@itamanager.cloud",
+      nom: "Yao",
+      prenom: "Kouassi",
+      // Volontairement DIRECTEUR : rôle éligible à la validation parallèle
+      // Achat via le sentinel enAttenteValidationDe (cf. CLAUDE.md).
+      niveauHierarchique: "DIRECTEUR" as const,
+      fonctionId: fonctions.dfcFonction.id,
     },
   ];
 
@@ -912,6 +1010,20 @@ async function seedPointsInspection() {
   }
 }
 
+/// Lot 7 — référentiel de configuration à une seule ligne (table plutôt
+/// qu'enum, même philosophie que CategorieMateriel/UniteMesure). Seuil
+/// placeholder — aucun chiffre métier réel n'a été fourni.
+///
+/// Note connue, non corrigée (même convention que chaque lot précédent) :
+/// le catch-all "Responsable RH" (tousLesSousModulesSauf(["pointage"]))
+/// obtient aussi incidemment les 4 nouveaux sous-modules "achat" ci-dessus
+/// — cf. CLAUDE.md, jamais patché en marge d'un lot non lié à ce sujet.
+async function seedParametresAchat() {
+  const existant = await prisma.parametresAchat.findFirst();
+  if (existant) return;
+  await prisma.parametresAchat.create({ data: { seuilUrgence: 500_000 } });
+}
+
 /// Véhicules de test durables — aucun type ENGIN n'existait avant la
 /// Livraison B, nécessaire pour tester InspectionEngin/le blocage auto.
 async function seedVehiculesTestLivraisonB() {
@@ -943,6 +1055,7 @@ async function main() {
   await seedDocumentsInspection();
   await seedPointsInspection();
   await seedVehiculesTestLivraisonB();
+  await seedParametresAchat();
 }
 
 main()
