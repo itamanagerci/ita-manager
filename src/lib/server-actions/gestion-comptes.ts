@@ -149,6 +149,20 @@ async function possedeDonneesLiees(utilisateurId: string): Promise<boolean> {
     comptagesInventaire,
     validationsInventaire,
     mouvementsStock,
+    vehiculesConduits,
+    verificationsInventaireVehicule,
+    mouvementsVehicule,
+    demandesTransport,
+    visasLogistiqueTransport,
+    gestionsDepartTransport,
+    gestionsRetourTransport,
+    receptionsInspectionVehicule,
+    chefChantierInspectionVehicule,
+    receptionsInspectionEngin,
+    chefChantierInspectionEngin,
+    demandesBonSortieTransfert,
+    expeditionsBonSortieTransfert,
+    responsabiliteSortieTransfert,
   ] = await Promise.all([
     prisma.historiqueStatut.count({ where: { acteurId: utilisateurId } }),
     prisma.demandeIndex.count({
@@ -193,6 +207,20 @@ async function possedeDonneesLiees(utilisateurId: string): Promise<boolean> {
     prisma.sessionInventaire.count({ where: { effectueParId: utilisateurId } }),
     prisma.sessionInventaire.count({ where: { valideParId: utilisateurId } }),
     prisma.mouvementStock.count({ where: { effectueParId: utilisateurId } }),
+    prisma.vehicule.count({ where: { chauffeurActuelId: utilisateurId } }),
+    prisma.vehicule.count({ where: { verificateurDerniereVerificationId: utilisateurId } }),
+    prisma.historiqueMouvementVehicule.count({ where: { effectueParId: utilisateurId } }),
+    prisma.demandeTransport.count({ where: { demandeurId: utilisateurId } }),
+    prisma.demandeTransport.count({ where: { visaLogistiqueParId: utilisateurId } }),
+    prisma.demandeTransport.count({ where: { gestionnaireDepartId: utilisateurId } }),
+    prisma.demandeTransport.count({ where: { gestionnaireRetourId: utilisateurId } }),
+    prisma.inspectionVehicule.count({ where: { receptionnaireVerificateurId: utilisateurId } }),
+    prisma.inspectionVehicule.count({ where: { chefChantierId: utilisateurId } }),
+    prisma.inspectionEngin.count({ where: { receptionnaireVerificateurId: utilisateurId } }),
+    prisma.inspectionEngin.count({ where: { chefChantierOuGarageId: utilisateurId } }),
+    prisma.bonSortieTransfert.count({ where: { demandeurId: utilisateurId } }),
+    prisma.bonSortieTransfert.count({ where: { expediteurConvoyeurId: utilisateurId } }),
+    prisma.bonSortieTransfert.count({ where: { responsableSortieId: utilisateurId } }),
   ]);
 
   return (
@@ -225,7 +253,21 @@ async function possedeDonneesLiees(utilisateurId: string): Promise<boolean> {
     validationsBEM > 0 ||
     comptagesInventaire > 0 ||
     validationsInventaire > 0 ||
-    mouvementsStock > 0
+    mouvementsStock > 0 ||
+    vehiculesConduits > 0 ||
+    verificationsInventaireVehicule > 0 ||
+    mouvementsVehicule > 0 ||
+    demandesTransport > 0 ||
+    visasLogistiqueTransport > 0 ||
+    gestionsDepartTransport > 0 ||
+    gestionsRetourTransport > 0 ||
+    receptionsInspectionVehicule > 0 ||
+    chefChantierInspectionVehicule > 0 ||
+    receptionsInspectionEngin > 0 ||
+    chefChantierInspectionEngin > 0 ||
+    demandesBonSortieTransfert > 0 ||
+    expeditionsBonSortieTransfert > 0 ||
+    responsabiliteSortieTransfert > 0
   );
 }
 

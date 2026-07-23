@@ -155,6 +155,21 @@ model Utilisateur {
   validationsBEM           BonEntreeMagasin[]        @relation("UtilisateurValideurBEM")
   comptagesInventaire      SessionInventaire[]       @relation("UtilisateurCompteurInventaire")
   validationsInventaire    SessionInventaire[]       @relation("UtilisateurValideurInventaire")
+
+  vehiculesConduits               Vehicule[]                    @relation("UtilisateurChauffeurVehicule")
+  verificationsInventaireVehicule Vehicule[]                    @relation("UtilisateurVerificateurInventaireVehicule")
+  mouvementsVehiculeEffectues     HistoriqueMouvementVehicule[] @relation("UtilisateurMouvementVehicule")
+  demandesTransport               DemandeTransport[]            @relation("UtilisateurDemandeurTransport")
+  visasLogistiqueTransport        DemandeTransport[]            @relation("UtilisateurVisaLogistiqueTransport")
+  gestionsDepartTransport         DemandeTransport[]            @relation("UtilisateurGestionnaireDepartTransport")
+  gestionsRetourTransport         DemandeTransport[]            @relation("UtilisateurGestionnaireRetourTransport")
+  receptionsInspectionVehicule    InspectionVehicule[]          @relation("UtilisateurReceptionnaireInspVehicule")
+  chefChantierInspectionVehicule  InspectionVehicule[]          @relation("UtilisateurChefChantierInspVehicule")
+  receptionsInspectionEngin       InspectionEngin[]             @relation("UtilisateurReceptionnaireInspEngin")
+  chefChantierInspectionEngin     InspectionEngin[]             @relation("UtilisateurChefChantierInspEngin")
+  demandesBonSortieTransfert      BonSortieTransfert[]          @relation("UtilisateurDemandeurBonSortieTransfert")
+  expeditionsBonSortieTransfert   BonSortieTransfert[]          @relation("UtilisateurExpediteurBonSortieTransfert")
+  responsabiliteSortieTransfert   BonSortieTransfert[]          @relation("UtilisateurResponsableSortieBonSortieTransfert")
 }
 
 /// Droits d'accès individuels. Initialisés depuis FonctionModuleDefaut à la création
@@ -277,17 +292,89 @@ enum StatutDemandeCarburant {
 enum TypeVehicule {
   LEGER
   LOURD
+  ENGIN
 }
 
-/// Lot 3 — Gestion Carburant. Référentiel véhicule volontairement minimal :
-/// le futur Lot 6 (Logistique) l'étendra (affectation, historique, statuts...)
-/// plutôt que de le remplacer — cf. CLAUDE.md.
+/// Statut opérationnel du jour — 3 valeurs réelles observées dans les
+/// données de flotte de l'entreprise, pas les 5 valeurs (En service | En
+/// réparation | En standby | Réformé | Cédé) du document de cadrage —
+/// remplacées volontairement, cf. CLAUDE.md. La sortie définitive
+/// (réforme/cession) est une dimension séparée (Vehicule.dateSortieDefinitive),
+/// pas une valeur de cet enum.
+enum EtatVehicule {
+  OK
+  PANNE
+  HORS_SERVICE
+}
+
+/// Lot 3 — minimal (immatriculation, type, quota). Étendu au Lot 6
+/// (Livraison B) en vraie fiche véhicule/engin — cf. CLAUDE.md.
 model Vehicule {
-  id                 String             @id @default(cuid())
-  immatriculation    String             @unique
+  id                 String       @id @default(cuid())
+  immatriculation    String       @unique
   type               TypeVehicule
   quotaMensuelLitres Int
-  demandesCarburant  DemandeCarburant[]
+
+  numeroInterne   String?
+  marque          String?
+  modele          String?
+  annee           Int?
+  dateEntree      DateTime?
+  modeAcquisition String?
+  etat            EtatVehicule @default(OK)
+
+  chauffeurActuelId String?
+  chauffeurActuel   Utilisateur? @relation("UtilisateurChauffeurVehicule", fields: [chauffeurActuelId], references: [id])
+  chantierActuel    String?
+  compteurActuel    Int?
+  dateAffectation   DateTime?
+
+  dateDerniereVerificationInventaire DateTime?
+  verificateurDerniereVerificationId String?
+  verificateurDerniereVerification   Utilisateur?  @relation("UtilisateurVerificateurInventaireVehicule", fields: [verificateurDerniereVerificationId], references: [id])
+  etatConstateDerniereVerification   EtatVehicule?
+
+  /// Dimension distincte de `etat` — cf. CLAUDE.md. Alerte DFC (mise à
+  /// jour des immobilisations) non implémentée, Lot 8 pas construit.
+  dateSortieDefinitive  DateTime?
+  motifSortieDefinitive String?
+  valeurResiduelle      Decimal?  @db.Decimal(14, 2)
+
+  demandesCarburant     DemandeCarburant[]
+  historiqueMouvements  HistoriqueMouvementVehicule[]
+  piecesAdministratives PieceAdministrativeVehicule[]
+  demandesTransport     DemandeTransport[]
+  inspectionsVehicule   InspectionVehicule[]
+  inspectionsEngin      InspectionEngin[]
+}
+
+enum TypeMouvementVehicule {
+  CHANGEMENT_ETAT
+  CHANGEMENT_AFFECTATION
+  SORTIE_DEFINITIVE
+}
+
+/// Historique des mouvements — table dédiée, même esprit que MouvementStock
+/// (Livraison A) : un changement d'affectation a une forme avant/après que
+/// HistoriqueStatut générique ne capture pas bien.
+model HistoriqueMouvementVehicule {
+  id         String                @id @default(cuid())
+  vehiculeId String
+  vehicule   Vehicule              @relation(fields: [vehiculeId], references: [id])
+  type       TypeMouvementVehicule
+
+  etatAvant     EtatVehicule?
+  etatApres     EtatVehicule?
+  chantierAvant String?
+  chantierApres String?
+  commentaire   String?
+
+  effectueParId String?
+  effectuePar   Utilisateur? @relation("UtilisateurMouvementVehicule", fields: [effectueParId], references: [id])
+
+  date DateTime @default(now())
+
+  @@index([vehiculeId, date])
 }
 
 model Depot {
@@ -707,6 +794,7 @@ model Materiel {
   demandesReapprovisionnement DemandeReapprovisionnement[]
   lignesDMS                   LigneDemandeMiseADisposition[]
   lignesBEM                   LigneBonEntreeMagasin[]
+  lignesBonSortieTransfert    LigneBonSortieTransfert[]
 
   @@index([categorieId])
   @@index([magasinId])
@@ -1113,4 +1201,377 @@ model DemandeReapprovisionnement {
 
   @@unique([materielId, statut])
   @@index([statut])
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Lot 6 — Service Logistique, Livraison B (véhicules, engins, transport).
+// Contenu fidèle aux sections 6.7–6.14 du document de cadrage original —
+// cf. CLAUDE.md pour le raisonnement complet (rôles réutilisés de la
+// Livraison A, contenu placeholder signalé pour les points d'inspection
+// non énumérés dans le document, etc.).
+// ─────────────────────────────────────────────────────────────────────────
+
+/// Table plutôt qu'enum, même raisonnement que CategorieMateriel/UniteMesure
+/// (Livraison A). Contenu réel tiré des fichiers Excel "Contrôle
+/// réglementaire" fournis par l'utilisateur.
+model TypePieceAdministrative {
+  id              String  @id @default(cuid())
+  code            String  @unique
+  nom             String
+  /// Null pour les pièces non-récurrentes (ex. Carte Grise).
+  periodiciteMois Int?
+  ordre           Int     @default(0)
+  actif           Boolean @default(true)
+
+  pieces PieceAdministrativeVehicule[]
+}
+
+/// Suivi documentaire par véhicule (6.8) — pas de circuit de validation,
+/// gestion directe. Alerte d'expiration : cf. verifierEtCreerAlertesExpirationPieces()
+/// (pieces-admin-vehicules.ts), pattern page-level comme seuil-alerte.
+model PieceAdministrativeVehicule {
+  id          String                  @id @default(cuid())
+  vehiculeId  String
+  vehicule    Vehicule                @relation(fields: [vehiculeId], references: [id])
+  typePieceId String
+  typePiece   TypePieceAdministrative @relation(fields: [typePieceId], references: [id])
+
+  dateEmission   DateTime?
+  dateExpiration DateTime?
+
+  /// Bucket Storage privé "documents" (Lot 2), préfixe "pieces-admin-vehicules/".
+  cheminFichier      String?
+  nomFichierOriginal String?
+
+  dateCreation DateTime @default(now())
+
+  @@index([vehiculeId])
+  @@index([dateExpiration])
+}
+
+enum NatureDemandeTransport {
+  TRANSPORT_TRANSFERT
+  MISE_A_DISPOSITION
+}
+
+enum StatutDemandeTransport {
+  SOUMIS
+  VISA_LOGISTIQUE
+  VERIFIE_DEPART
+  EN_COURS
+  VERIFIE_RETOUR
+  ARCHIVE
+  REFUSE
+}
+
+/// Circuit à 5 étapes (6.10) — Demandeur → visa Logistique + affectation
+/// véhicule → checklist/visa Départ (Chef Magasin, rôle "Section
+/// Transport/Garage") → checklist/visa Retour → archivé. Aucune nouvelle
+/// Fonction : réutilise Responsable Service Logistique et Chef Magasin de
+/// la Livraison A. Cf. CLAUDE.md.
+model DemandeTransport {
+  id     String @id @default(cuid())
+  numero Int    @unique @default(autoincrement())
+
+  serviceChantier String
+  /// Centre d'Imputation Analytique.
+  cia             String
+  nature          NatureDemandeTransport
+  description     String
+  dateDebut       DateTime
+  dateFin         DateTime
+
+  demandeurId String
+  demandeur   Utilisateur @relation("UtilisateurDemandeurTransport", fields: [demandeurId], references: [id])
+
+  statut StatutDemandeTransport @default(SOUMIS)
+
+  vehiculeId          String?
+  vehicule            Vehicule?    @relation(fields: [vehiculeId], references: [id])
+  visaLogistiqueParId String?
+  visaLogistiquePar   Utilisateur? @relation("UtilisateurVisaLogistiqueTransport", fields: [visaLogistiqueParId], references: [id])
+  dateVisaLogistique  DateTime?
+
+  conducteurDepartNom  String?
+  compteurDepart       Int?
+  dateDepartReelle     DateTime?
+  gestionnaireDepartId String?
+  gestionnaireDepart   Utilisateur? @relation("UtilisateurGestionnaireDepartTransport", fields: [gestionnaireDepartId], references: [id])
+
+  conducteurRetourNom  String?
+  compteurRetour       Int?
+  dateRetourReelle     DateTime?
+  gestionnaireRetourId String?
+  gestionnaireRetour   Utilisateur? @relation("UtilisateurGestionnaireRetourTransport", fields: [gestionnaireRetourId], references: [id])
+  /// "Référence ITA" — visa retour, cas engin.
+  referenceEngin       String?
+
+  motifRefus String?
+
+  reponsesChecklist ReponseChecklistTransport[]
+
+  dateCreation     DateTime @default(now())
+  dateModification DateTime @updatedAt
+
+  @@index([statut])
+}
+
+enum CategorieItemChecklistTransport {
+  MATERIEL_BORD
+  PIECE_ADMINISTRATIVE
+  DOCUMENT_SUIVI
+}
+
+/// Référentiel fixe (table, pas enum) — 9 matériels à bord + 6 pièces
+/// administratives + 1 document de suivi, contenu réel du document.
+model ItemChecklistTransport {
+  id        String                          @id @default(cuid())
+  categorie CategorieItemChecklistTransport
+  code      String                          @unique
+  libelle   String
+  ordre     Int                             @default(0)
+  actif     Boolean                         @default(true)
+
+  reponses ReponseChecklistTransport[]
+}
+
+/// Une ligne par item, colonnes Départ/Retour sur la même ligne plutôt que
+/// deux lignes distinctes — évite une jointure pour afficher le tableau D/R.
+model ReponseChecklistTransport {
+  id        String                 @id @default(cuid())
+  demandeId String
+  demande   DemandeTransport       @relation(fields: [demandeId], references: [id], onDelete: Cascade)
+  itemId    String
+  item      ItemChecklistTransport @relation(fields: [itemId], references: [id])
+
+  presentDepart Boolean?
+  presentRetour Boolean?
+
+  @@unique([demandeId, itemId])
+}
+
+enum CategorieInspection {
+  VEHICULE
+  ENGIN
+}
+
+enum EtatPointInspection {
+  BON
+  MAUVAIS
+  ABSENT
+}
+
+/// Référentiel seedé — 30 points véhicule + 27 points engin. Table (pas
+/// enum), corrigeable sans migration. Contenu partiellement placeholder —
+/// cf. CLAUDE.md.
+model PointInspection {
+  id        String              @id @default(cuid())
+  categorie CategorieInspection
+  code      String              @unique
+  libelle   String
+  ordre     Int                 @default(0)
+  actif     Boolean             @default(true)
+
+  reponsesVehicule ReponsePointInspectionVehicule[]
+  reponsesEngin    ReponsePointInspectionEngin[]
+}
+
+/// Référentiel seedé — 10 documents véhicule + 4 documents engin, contenu
+/// réel du document de cadrage.
+model DocumentInspection {
+  id        String              @id @default(cuid())
+  categorie CategorieInspection
+  code      String              @unique
+  libelle   String
+  ordre     Int                 @default(0)
+  actif     Boolean             @default(true)
+
+  reponsesVehicule ReponseDocumentInspectionVehicule[]
+  reponsesEngin    ReponseDocumentInspectionEngin[]
+}
+
+enum StatutInspection {
+  RENSEIGNEE
+  POINTS_CONTROLES
+  DOCS_CONTROLEES
+  SIGNEE
+  ARCHIVEE
+}
+
+/// Fiche d'Inspection Entrée — Véhicules Légers/PL (6.11a). Anomalie
+/// (point/document Mauvais ou Absent) → alerte au Responsable Service
+/// Logistique, jamais un blocage automatique (contrairement à l'engin) —
+/// cf. CLAUDE.md.
+model InspectionVehicule {
+  id     String @id @default(cuid())
+  numero Int    @unique @default(autoincrement())
+
+  vehiculeId         String
+  vehicule           Vehicule @relation(fields: [vehiculeId], references: [id])
+  demandeTransportId String?
+
+  date             DateTime
+  heure            String?
+  chantierSiteLieu String
+  kilometrage      Int
+  destination      String
+  conducteurNom    String
+  transporteurNom  String?
+  /// Jauge E→F, 0-100.
+  niveauCarburant  Int
+
+  receptionnaireVerificateurId String
+  receptionnaireVerificateur   Utilisateur  @relation("UtilisateurReceptionnaireInspVehicule", fields: [receptionnaireVerificateurId], references: [id])
+  chefChantierId               String?
+  chefChantier                 Utilisateur? @relation("UtilisateurChefChantierInspVehicule", fields: [chefChantierId], references: [id])
+  remorqueurNom                String?
+
+  statut           StatutInspection @default(RENSEIGNEE)
+  anomalieDetectee Boolean          @default(false)
+  dateSignature    DateTime?
+
+  reponsesPoints    ReponsePointInspectionVehicule[]
+  reponsesDocuments ReponseDocumentInspectionVehicule[]
+
+  dateCreation DateTime @default(now())
+
+  @@index([vehiculeId])
+}
+
+model ReponsePointInspectionVehicule {
+  id           String              @id @default(cuid())
+  inspectionId String
+  inspection   InspectionVehicule  @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+  pointId      String
+  point        PointInspection     @relation(fields: [pointId], references: [id])
+  etat         EtatPointInspection
+  observation  String?
+
+  @@unique([inspectionId, pointId])
+}
+
+model ReponseDocumentInspectionVehicule {
+  id           String              @id @default(cuid())
+  inspectionId String
+  inspection   InspectionVehicule  @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+  documentId   String
+  document     DocumentInspection  @relation(fields: [documentId], references: [id])
+  etat         EtatPointInspection
+  observation  String?
+
+  @@unique([inspectionId, documentId])
+}
+
+/// Fiche d'Inspection Entrée — Engins (6.11b). Anomalie → bascule
+/// automatiquement Vehicule.etat à HORS_SERVICE (mise en service bloquée
+/// réellement, contrairement au véhicule léger/PL) — cf. CLAUDE.md.
+model InspectionEngin {
+  id     String @id @default(cuid())
+  numero Int    @unique @default(autoincrement())
+
+  vehiculeId         String
+  vehicule           Vehicule @relation(fields: [vehiculeId], references: [id])
+  demandeTransportId String?
+
+  date            DateTime
+  heure           String?
+  chantierSite    String
+  provenance      String
+  conducteurNom   String?
+  transporteurNom String?
+
+  receptionnaireVerificateurId String
+  receptionnaireVerificateur   Utilisateur  @relation("UtilisateurReceptionnaireInspEngin", fields: [receptionnaireVerificateurId], references: [id])
+  chefChantierOuGarageId       String?
+  chefChantierOuGarage         Utilisateur? @relation("UtilisateurChefChantierInspEngin", fields: [chefChantierOuGarageId], references: [id])
+  transporteurEnginNom         String?
+
+  statut           StatutInspection @default(RENSEIGNEE)
+  anomalieDetectee Boolean          @default(false)
+  dateSignature    DateTime?
+
+  reponsesPoints    ReponsePointInspectionEngin[]
+  reponsesDocuments ReponseDocumentInspectionEngin[]
+
+  dateCreation DateTime @default(now())
+
+  @@index([vehiculeId])
+}
+
+model ReponsePointInspectionEngin {
+  id           String              @id @default(cuid())
+  inspectionId String
+  inspection   InspectionEngin     @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+  pointId      String
+  point        PointInspection     @relation(fields: [pointId], references: [id])
+  etat         EtatPointInspection
+  observation  String?
+
+  @@unique([inspectionId, pointId])
+}
+
+model ReponseDocumentInspectionEngin {
+  id           String              @id @default(cuid())
+  inspectionId String
+  inspection   InspectionEngin     @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+  documentId   String
+  document     DocumentInspection  @relation(fields: [documentId], references: [id])
+  etat         EtatPointInspection
+  observation  String?
+
+  @@unique([inspectionId, documentId])
+}
+
+enum StatutBonSortieTransfert {
+  CREE
+  ARTICLES_RENSEIGNES
+  SIGNE
+}
+
+/// Bon de Sortie et Transfert — Matériel/Équipement/Immobilisation (6.12).
+/// Distinct du BonSortieMagasin (Livraison A, dépend d'une DMS) : triple
+/// signature directe, couvre tout mouvement d'un Materiel existant (pas
+/// une consommation de stock via demande). Décrémente le même ledger
+/// MouvementStock que le flux-sortie — cf. CLAUDE.md.
+model BonSortieTransfert {
+  id     String @id @default(cuid())
+  numero Int    @unique @default(autoincrement())
+
+  dateSortie            DateTime @default(now())
+  lieuSortie            String
+  motif                 String
+  destination           String
+  receptionnaireNom     String
+  receptionnaireContact String
+  cia                   String?
+  demandeTransportId    String?
+
+  demandeurId           String
+  demandeur             Utilisateur  @relation("UtilisateurDemandeurBonSortieTransfert", fields: [demandeurId], references: [id])
+  expediteurConvoyeurId String?
+  expediteurConvoyeur   Utilisateur? @relation("UtilisateurExpediteurBonSortieTransfert", fields: [expediteurConvoyeurId], references: [id])
+  dateVisaExpediteur    DateTime?
+
+  /// Cette signature déclenche le décrément de stock — même pattern
+  /// atomique interactive que flux-sortie (Livraison A).
+  responsableSortieId       String?
+  responsableSortie         Utilisateur? @relation("UtilisateurResponsableSortieBonSortieTransfert", fields: [responsableSortieId], references: [id])
+  dateVisaResponsableSortie DateTime?
+
+  statut StatutBonSortieTransfert  @default(CREE)
+  lignes LigneBonSortieTransfert[]
+
+  dateCreation     DateTime @default(now())
+  dateModification DateTime @updatedAt
+}
+
+model LigneBonSortieTransfert {
+  id          String             @id @default(cuid())
+  bonId       String
+  bon         BonSortieTransfert @relation(fields: [bonId], references: [id], onDelete: Cascade)
+  materielId  String
+  materiel    Materiel           @relation(fields: [materielId], references: [id])
+  quantite    Int
+  etat        String?
+  observation String?
 }

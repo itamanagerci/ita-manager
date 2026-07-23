@@ -284,6 +284,9 @@ async function seedFonctions() {
     // Lot 3 — ajout délibéré : persona demandeur carburant réaliste et
     // propre (distinct de l'accès déjà large et non-corrigé de RH).
     "demande-carburant",
+    // Lot 6, Livraison B — même persona demandeur pour Demande de
+    // Transport (déjà présent) et Bon de Sortie et Transfert (nouveau).
+    "bon-sortie",
   ];
   const sousModulesChefChantier = await prisma.sousModule.findMany({
     where: { code: { in: codesChefChantier } },
@@ -425,6 +428,16 @@ async function seedFonctions() {
     "flux-entree",
     "inventaire-periodique",
     "seuil-alerte",
+    // Lot 6, Livraison B — rôle stratégique/transverse (Logisticien) sur
+    // les 8 sous-modules véhicules/engins/transport, en plus du stock.
+    "suivi-vehicules-engins",
+    "pieces-admin-vehicules",
+    "suivi-conso-carburant",
+    "demande-transport",
+    "inspection-vehicule",
+    "inspection-engin",
+    "bon-sortie",
+    "tableaux-suivi",
   ];
   const sousModulesResponsableServiceLogistique = await prisma.sousModule.findMany({
     where: { code: { in: codesResponsableServiceLogistique } },
@@ -459,7 +472,16 @@ async function seedFonctions() {
       description: "Vérification des DMS, réception BEM et comptages d'inventaire pour son magasin",
     },
   });
-  const codesChefMagasin = ["flux-sortie", "flux-entree", "inventaire-periodique"];
+  const codesChefMagasin = [
+    "flux-sortie",
+    "flux-entree",
+    "inventaire-periodique",
+    // Lot 6, Livraison B — rôle "Section Transport/Garage" (Départ/
+    // Retour) et Réceptionnaire-Vérificateur des inspections d'entrée.
+    "demande-transport",
+    "inspection-vehicule",
+    "inspection-engin",
+  ];
   const sousModulesChefMagasin = await prisma.sousModule.findMany({
     where: { code: { in: codesChefMagasin } },
   });
@@ -708,6 +730,204 @@ async function seedLogistiqueTest() {
   }
 }
 
+/// Lot 6, Livraison B — contenu réel tiré des fichiers Excel "Contrôle
+/// réglementaire" (Lot 6 planning). Périodicité de VGP fixée à 12 mois par
+/// défaut ("6 mois/1 an" dans la source, ambigu) — corrigeable sans
+/// migration (table, pas enum).
+async function seedTypesPiecesAdministratives() {
+  const types = [
+    { code: "CT", nom: "Contrôle Technique", periodiciteMois: 12 },
+    { code: "ASSURANCE", nom: "Assurance", periodiciteMois: 12 },
+    { code: "LEVAGE", nom: "Levage", periodiciteMois: 6 },
+    { code: "VGP", nom: "VGP", periodiciteMois: 12 },
+    { code: "AIR", nom: "Air", periodiciteMois: 12 },
+    { code: "TAXE_DISTRICT", nom: "Taxe district (stationnement)", periodiciteMois: 12 },
+    { code: "PATENTE_TRANSPORT", nom: "Reçu de dépôt — patente de transport privé", periodiciteMois: 12 },
+    {
+      code: "VIGNETTE_TRANSPORT",
+      nom: "Vignette de transport marchandise et personnel",
+      periodiciteMois: 24,
+    },
+  ];
+  for (const [ordre, type] of types.entries()) {
+    await prisma.typePieceAdministrative.upsert({
+      where: { code: type.code },
+      update: { nom: type.nom, periodiciteMois: type.periodiciteMois },
+      create: { ...type, ordre },
+    });
+  }
+}
+
+/// Contenu réel du document de cadrage (6.10) — 9 matériels à bord + 6
+/// pièces administratives + 1 document de suivi.
+async function seedItemsChecklistTransport() {
+  const items: { categorie: "MATERIEL_BORD" | "PIECE_ADMINISTRATIVE" | "DOCUMENT_SUIVI"; code: string; libelle: string }[] = [
+    { categorie: "MATERIEL_BORD", code: "CRIC", libelle: "Cric" },
+    { categorie: "MATERIEL_BORD", code: "MANIVELLE", libelle: "Manivelle" },
+    { categorie: "MATERIEL_BORD", code: "DEMONTE_ROUE", libelle: "Démonte-Roue" },
+    { categorie: "MATERIEL_BORD", code: "PNEU_SECOURS", libelle: "Pneu secours" },
+    { categorie: "MATERIEL_BORD", code: "EXTINCTEUR_TRANSPORT", libelle: "Extincteur" },
+    { categorie: "MATERIEL_BORD", code: "TRIANGLE", libelle: "Triangle" },
+    { categorie: "MATERIEL_BORD", code: "GPS", libelle: "GPS" },
+    { categorie: "MATERIEL_BORD", code: "SANGLES", libelle: "Sangles" },
+    { categorie: "MATERIEL_BORD", code: "CHAINES", libelle: "Chaînes" },
+    { categorie: "PIECE_ADMINISTRATIVE", code: "VISITE_TECHNIQUE", libelle: "Visite Technique" },
+    { categorie: "PIECE_ADMINISTRATIVE", code: "ASSURANCE_TRANSPORT", libelle: "Assurance" },
+    { categorie: "PIECE_ADMINISTRATIVE", code: "CARTE_GRISE", libelle: "Carte Grise" },
+    { categorie: "PIECE_ADMINISTRATIVE", code: "PATENTE", libelle: "Patente" },
+    { categorie: "PIECE_ADMINISTRATIVE", code: "CARTE_TRANSPORT", libelle: "Carte de Transport" },
+    { categorie: "PIECE_ADMINISTRATIVE", code: "CARTE_STATIONNEMENT", libelle: "Carte de Stationnement" },
+    { categorie: "DOCUMENT_SUIVI", code: "CARNET_DE_BORD_TRANSPORT", libelle: "Carnet de Bord" },
+  ];
+  for (const [ordre, item] of items.entries()) {
+    await prisma.itemChecklistTransport.upsert({
+      where: { code: item.code },
+      update: { libelle: item.libelle, categorie: item.categorie },
+      create: { ...item, ordre },
+    });
+  }
+}
+
+/// Documents d'inspection — contenu réel du document de cadrage (6.11a/b).
+async function seedDocumentsInspection() {
+  const documentsVehicule = [
+    "Visite Technique",
+    "Assurance",
+    "Carte Grise",
+    "Patente",
+    "Carte de Transport",
+    "Carte de Stationnement",
+    "Autorisations Hors Gabarit",
+    "Autorisations Enfûtage",
+    "Carnet de Bord",
+    "VGP",
+  ];
+  const documentsEngin = ["Documents d'Achats-Douanes", "Assurance", "VGP-Certificat de conformité", "Carnet de Bord"];
+
+  for (const [ordre, libelle] of documentsVehicule.entries()) {
+    const code = `DOC_VEHICULE_${ordre + 1}`;
+    await prisma.documentInspection.upsert({
+      where: { code },
+      update: { libelle, categorie: "VEHICULE" },
+      create: { code, libelle, categorie: "VEHICULE", ordre },
+    });
+  }
+  for (const [ordre, libelle] of documentsEngin.entries()) {
+    const code = `DOC_ENGIN_${ordre + 1}`;
+    await prisma.documentInspection.upsert({
+      where: { code },
+      update: { libelle, categorie: "ENGIN" },
+      create: { code, libelle, categorie: "ENGIN", ordre },
+    });
+  }
+}
+
+/// Points de contrôle physiques (6.11a/b) — 30 véhicule + 27 engin. Le
+/// document de cadrage ne donne la structure exacte (30/27 points Bon/
+/// Mauvais/Absent + observation) que pour 8 des 27 points engin ("chenilles,
+/// vérins, godet, dents du godet, gyrophare, bip de recul, flexibles,
+/// freins") ; les 19 restants et les 30 véhicule sont un contenu plausible
+/// pour une flotte BTP, clairement placeholder, corrigeable sans migration
+/// (table, pas enum). Cf. CLAUDE.md.
+async function seedPointsInspection() {
+  const pointsVehicule = [
+    "Pneus avant — état/pression",
+    "Pneus arrière — état/pression",
+    "Roue de secours",
+    "Freins — pédale",
+    "Frein à main",
+    "Direction",
+    "Suspension",
+    "Éclairage — feux avant",
+    "Éclairage — feux arrière",
+    "Éclairage — feux de stop",
+    "Éclairage — clignotants",
+    "Rétroviseurs",
+    "Essuie-glaces",
+    "Lave-glace",
+    "Klaxon",
+    "Ceintures de sécurité",
+    "Pare-brise — état",
+    "Vitres latérales",
+    "Carrosserie — état général",
+    "Portières — fermeture",
+    "Niveau huile moteur",
+    "Niveau liquide de refroidissement",
+    "Niveau liquide de frein",
+    "Batterie",
+    "Extincteur",
+    "Triangle de signalisation",
+    "Trousse de secours",
+    "Gilet de sécurité",
+    "Cric et outillage de bord",
+    "Propreté intérieure/extérieure",
+  ];
+
+  // Les 8 premiers sont réels (document de cadrage) — les 19 suivants sont placeholder.
+  const pointsEngin = [
+    "Chenilles",
+    "Vérins",
+    "Godet",
+    "Dents du godet",
+    "Gyrophare",
+    "Bip de recul",
+    "Flexibles hydrauliques",
+    "Freins",
+    "Moteur — niveau huile",
+    "Moteur — niveau liquide de refroidissement",
+    "Batterie",
+    "Pneus (si applicable)",
+    "Cabine — état vitres",
+    "Cabine — essuie-glace",
+    "Cabine — ceinture de sécurité",
+    "Climatisation cabine",
+    "Éclairage — phares avant/arrière",
+    "Rétroviseurs",
+    "Klaxon",
+    "Extincteur",
+    "Trousse de secours",
+    "Freins de parking",
+    "Direction / commandes hydrauliques",
+    "Chaîne/câble de levage",
+    "Fixations et boulonnerie du godet",
+    "Carrosserie / châssis — état général",
+    "Propreté générale",
+  ];
+
+  for (const [ordre, libelle] of pointsVehicule.entries()) {
+    const code = `PT_VEHICULE_${ordre + 1}`;
+    await prisma.pointInspection.upsert({
+      where: { code },
+      update: { libelle, categorie: "VEHICULE" },
+      create: { code, libelle, categorie: "VEHICULE", ordre },
+    });
+  }
+  for (const [ordre, libelle] of pointsEngin.entries()) {
+    const code = `PT_ENGIN_${ordre + 1}`;
+    await prisma.pointInspection.upsert({
+      where: { code },
+      update: { libelle, categorie: "ENGIN" },
+      create: { code, libelle, categorie: "ENGIN", ordre },
+    });
+  }
+}
+
+/// Véhicules de test durables — aucun type ENGIN n'existait avant la
+/// Livraison B, nécessaire pour tester InspectionEngin/le blocage auto.
+async function seedVehiculesTestLivraisonB() {
+  const engins = [
+    { immatriculation: "AK-ENG-001", numeroInterne: "AK-CHG01", marque: "SDLG", modele: "L956F" },
+    { immatriculation: "AK-ENG-002", numeroInterne: "AK-BUL01", marque: "CATERPILLAR", modele: "D6M" },
+  ];
+  for (const engin of engins) {
+    await prisma.vehicule.upsert({
+      where: { immatriculation: engin.immatriculation },
+      update: {},
+      create: { ...engin, type: "ENGIN", quotaMensuelLitres: 500 },
+    });
+  }
+}
+
 async function main() {
   await seedReferentielModules();
   await seedMagasins();
@@ -718,6 +938,11 @@ async function main() {
   await seedCarburantTest();
   await seedDirectionTechniqueTest();
   await seedLogistiqueTest();
+  await seedTypesPiecesAdministratives();
+  await seedItemsChecklistTransport();
+  await seedDocumentsInspection();
+  await seedPointsInspection();
+  await seedVehiculesTestLivraisonB();
 }
 
 main()
